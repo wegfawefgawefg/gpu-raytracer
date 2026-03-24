@@ -1,0 +1,149 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+struct Sphere
+{
+    vec4 centerRadius;
+    vec4 albedoKind;
+    vec4 emission;
+};
+
+layout(rgba8, binding = 0) uniform writeonly image2D outputImage;
+
+layout(std140, binding = 1) uniform FrameParams
+{
+    vec4 cameraPosition;
+    vec4 cameraForward;
+    vec4 cameraRight;
+    vec4 cameraUp;
+    vec4 renderInfo;
+} params;
+
+layout(std430, binding = 2) readonly buffer SphereBuffer
+{
+    Sphere spheres[];
+};
+
+struct HitInfo
+{
+    bool hit;
+    float t;
+    vec3 position;
+    vec3 normal;
+    vec3 albedo;
+    vec3 emission;
+    int materialKind;
+};
+
+bool hitSphere(Sphere sphere, vec3 rayOrigin, vec3 rayDirection, float tMin, float tMax,
+               out HitInfo hit)
+{
+    vec3 oc = rayOrigin - sphere.centerRadius.xyz;
+    float a = dot(rayDirection, rayDirection);
+    float halfB = dot(oc, rayDirection);
+    float c = dot(oc, oc) - sphere.centerRadius.w * sphere.centerRadius.w;
+    float discriminant = halfB * halfB - a * c;
+    if (discriminant < 0.0)
+    {
+        return false;
+    }
+
+    float sqrtDisc = sqrt(discriminant);
+    float root = (-halfB - sqrtDisc) / a;
+    if (root < tMin || root > tMax)
+    {
+        root = (-halfB + sqrtDisc) / a;
+        if (root < tMin || root > tMax)
+        {
+            return false;
+        }
+    }
+
+    hit.hit = true;
+    hit.t = root;
+    hit.position = rayOrigin + root * rayDirection;
+    hit.normal = normalize(hit.position - sphere.centerRadius.xyz);
+    hit.albedo = sphere.albedoKind.xyz;
+    hit.emission = sphere.emission.xyz;
+    hit.materialKind = int(round(sphere.albedoKind.w));
+    return true;
+}
+
+bool traceScene(vec3 rayOrigin, vec3 rayDirection, out HitInfo hit)
+{
+    hit.hit = false;
+    hit.t = 1e30;
+
+    int sphereCount = int(round(params.renderInfo.w));
+    for (int index = 0; index < sphereCount; ++index)
+    {
+        HitInfo candidate;
+        if (hitSphere(spheres[index], rayOrigin, rayDirection, 0.001, hit.t, candidate))
+        {
+            hit = candidate;
+        }
+    }
+
+    return hit.hit;
+}
+
+vec3 skyColor(vec3 rayDirection)
+{
+    float t = 0.5 * (rayDirection.y + 1.0);
+    return mix(vec3(0.75, 0.84, 0.96), vec3(0.10, 0.16, 0.28), t);
+}
+
+vec3 shade(HitInfo hit)
+{
+    if (hit.materialKind == 1)
+    {
+        return hit.emission;
+    }
+
+    Sphere lightSphere = spheres[2];
+    vec3 lightCenter = lightSphere.centerRadius.xyz;
+    vec3 toLight = lightCenter - hit.position;
+    float lightDistance = length(toLight);
+    vec3 lightDirection = toLight / lightDistance;
+
+    HitInfo shadowHit;
+    bool inShadow = traceScene(hit.position + hit.normal * 0.02, lightDirection, shadowHit) &&
+                    shadowHit.t < lightDistance - lightSphere.centerRadius.w;
+
+    float ndotl = max(dot(hit.normal, lightDirection), 0.0);
+    vec3 ambient = 0.06 * hit.albedo;
+    vec3 direct = vec3(0.0);
+    if (!inShadow)
+    {
+        float attenuation = 1.0 / max(lightDistance * lightDistance, 0.01);
+        direct = hit.albedo * lightSphere.emission.xyz * ndotl * attenuation;
+    }
+
+    return ambient + direct;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 renderSize = ivec2(params.renderInfo.xy);
+    if (pixel.x >= renderSize.x || pixel.y >= renderSize.y)
+    {
+        return;
+    }
+
+    vec2 uv = (vec2(pixel) + vec2(0.5)) / vec2(renderSize);
+    vec2 screen = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+
+    vec3 rayOrigin = params.cameraPosition.xyz;
+    vec3 rayDirection =
+        normalize(params.cameraForward.xyz + screen.x * params.cameraRight.xyz +
+                  screen.y * params.cameraUp.xyz);
+
+    HitInfo hit;
+    vec3 color = traceScene(rayOrigin, rayDirection, hit) ? shade(hit) : skyColor(rayDirection);
+    color = clamp(color, vec3(0.0), vec3(1.0));
+    color = pow(color, vec3(1.0 / 2.2));
+
+    imageStore(outputImage, pixel, vec4(color, 1.0));
+}

@@ -39,3 +39,8 @@
 
 # debug information files
 *.dwo
+
+# CMake and editor outputs
+build/
+.cache/
+.vscode/.cmake/
