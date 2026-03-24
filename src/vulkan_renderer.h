@@ -10,6 +10,7 @@
 #include <vulkan/vulkan.h>
 
 #include "gpu_types.h"
+#include "scene_data.h"
 #include "vulkan_helpers.h"
 
 struct VulkanRenderer
@@ -21,8 +22,7 @@ struct VulkanRenderer
 
     void Initialize(
         SDL_Window* window,
-        std::span<const GpuSphere> spheres,
-        std::span<const GpuTriangle> triangles,
+        const SceneData& scene,
         InitProgressFn progress = {}
     );
     void Shutdown();
@@ -42,10 +42,7 @@ struct VulkanRenderer
     void CreateDevice();
     void CreateCommandObjects();
     void CreateSyncObjects();
-    void CreateStaticBuffers(
-        std::span<const GpuSphere> spheres,
-        std::span<const GpuTriangle> triangles
-    );
+    void CreateStaticBuffers(const SceneData& scene);
     void CreateDescriptorObjects();
     void CreatePresentDescriptorObjects();
     void CreateComputePipeline();
@@ -84,6 +81,10 @@ struct VulkanRenderer
     BufferResource m_overlayBuffer;
     BufferResource m_sphereBuffer;
     BufferResource m_triangleBuffer;
+    BufferResource m_materialBuffer;
+    BufferResource m_bvhBuffer;
+    BufferResource m_textureInfoBuffer;
+    BufferResource m_texturePixelBuffer;
     ImageResource m_accumulationTarget;
     ImageResource m_presentTarget;
     ImageResource m_renderTarget;
@@ -106,8 +107,15 @@ struct VulkanRenderer
     std::uint32_t m_accumulatedFrames = 0;
     std::uint32_t m_sphereCount = 0;
     std::uint32_t m_triangleCount = 0;
+    std::uint32_t m_materialCount = 0;
+    std::uint32_t m_bvhNodeCount = 0;
+    std::uint32_t m_textureCount = 0;
     VkDeviceSize m_sphereBufferBytes = 0;
     VkDeviceSize m_triangleBufferBytes = 0;
+    VkDeviceSize m_materialBufferBytes = 0;
+    VkDeviceSize m_bvhBufferBytes = 0;
+    VkDeviceSize m_textureInfoBufferBytes = 0;
+    VkDeviceSize m_texturePixelBufferBytes = 0;
     bool m_renderTargetPrimed = false;
     bool m_accumulationPrimed = false;
 };

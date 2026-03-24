@@ -68,8 +68,7 @@ VulkanRenderer::~VulkanRenderer()
 
 void VulkanRenderer::Initialize(
     SDL_Window* window,
-    std::span<const GpuSphere> spheres,
-    std::span<const GpuTriangle> triangles,
+    const SceneData& scene,
     InitProgressFn progress
 )
 {
@@ -106,7 +105,7 @@ void VulkanRenderer::Initialize(
     {
         progress("Uploading scene buffers...", 0.74f);
     }
-    CreateStaticBuffers(spheres, triangles);
+    CreateStaticBuffers(scene);
     if (progress)
     {
         progress("Building descriptor sets...", 0.82f);
@@ -175,6 +174,10 @@ void VulkanRenderer::Shutdown()
 
     DestroyBuffer(m_device, m_sphereBuffer);
     DestroyBuffer(m_device, m_triangleBuffer);
+    DestroyBuffer(m_device, m_materialBuffer);
+    DestroyBuffer(m_device, m_bvhBuffer);
+    DestroyBuffer(m_device, m_textureInfoBuffer);
+    DestroyBuffer(m_device, m_texturePixelBuffer);
     DestroyBuffer(m_device, m_overlayBuffer);
     DestroyBuffer(m_device, m_paramsBuffer);
 
@@ -439,16 +442,31 @@ void VulkanRenderer::CreateSyncObjects()
     CheckVk(vkCreateFence(m_device, &fenceInfo, nullptr, &m_frameFence), "vkCreateFence");
 }
 
-void VulkanRenderer::CreateStaticBuffers(
-    std::span<const GpuSphere> spheres,
-    std::span<const GpuTriangle> triangles
-)
+void VulkanRenderer::CreateStaticBuffers(const SceneData& scene)
 {
-    m_sphereCount = static_cast<std::uint32_t>(spheres.size());
-    m_triangleCount = static_cast<std::uint32_t>(triangles.size());
-    m_sphereBufferBytes = std::max<VkDeviceSize>(spheres.size_bytes(), sizeof(GpuSphere));
+    m_sphereCount = static_cast<std::uint32_t>(scene.spheres.size());
+    m_triangleCount = static_cast<std::uint32_t>(scene.triangles.size());
+    m_materialCount = static_cast<std::uint32_t>(scene.materials.size());
+    m_bvhNodeCount = static_cast<std::uint32_t>(scene.bvhNodes.size());
+    m_textureCount = static_cast<std::uint32_t>(scene.textures.size());
+    m_sphereBufferBytes =
+        std::max<VkDeviceSize>(scene.spheres.size() * sizeof(GpuSphere), sizeof(GpuSphere));
     m_triangleBufferBytes =
-        std::max<VkDeviceSize>(triangles.size_bytes(), sizeof(GpuTriangle));
+        std::max<VkDeviceSize>(scene.triangles.size() * sizeof(GpuTriangle), sizeof(GpuTriangle));
+    m_materialBufferBytes =
+        std::max<VkDeviceSize>(scene.materials.size() * sizeof(GpuMaterial), sizeof(GpuMaterial));
+    m_bvhBufferBytes =
+        std::max<VkDeviceSize>(scene.bvhNodes.size() * sizeof(GpuBvhNode), sizeof(GpuBvhNode));
+    m_textureInfoBufferBytes =
+        std::max<VkDeviceSize>(
+            scene.textures.size() * sizeof(GpuTextureInfo),
+            sizeof(GpuTextureInfo)
+        );
+    m_texturePixelBufferBytes =
+        std::max<VkDeviceSize>(
+            scene.texturePixels.size() * sizeof(std::uint32_t),
+            sizeof(std::uint32_t)
+        );
 
     m_paramsBuffer = CreateBuffer(
         m_physicalDevice,
@@ -468,9 +486,13 @@ void VulkanRenderer::CreateStaticBuffers(
         true
     );
     std::memset(m_sphereBuffer.mapped, 0, static_cast<std::size_t>(m_sphereBufferBytes));
-    if (!spheres.empty())
+    if (!scene.spheres.empty())
     {
-        std::memcpy(m_sphereBuffer.mapped, spheres.data(), spheres.size_bytes());
+        std::memcpy(
+            m_sphereBuffer.mapped,
+            scene.spheres.data(),
+            scene.spheres.size() * sizeof(GpuSphere)
+        );
     }
 
     m_triangleBuffer = CreateBuffer(
@@ -482,9 +504,93 @@ void VulkanRenderer::CreateStaticBuffers(
         true
     );
     std::memset(m_triangleBuffer.mapped, 0, static_cast<std::size_t>(m_triangleBufferBytes));
-    if (!triangles.empty())
+    if (!scene.triangles.empty())
     {
-        std::memcpy(m_triangleBuffer.mapped, triangles.data(), triangles.size_bytes());
+        std::memcpy(
+            m_triangleBuffer.mapped,
+            scene.triangles.data(),
+            scene.triangles.size() * sizeof(GpuTriangle)
+        );
+    }
+
+    m_materialBuffer = CreateBuffer(
+        m_physicalDevice,
+        m_device,
+        m_materialBufferBytes,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
+    std::memset(m_materialBuffer.mapped, 0, static_cast<std::size_t>(m_materialBufferBytes));
+    if (!scene.materials.empty())
+    {
+        std::memcpy(
+            m_materialBuffer.mapped,
+            scene.materials.data(),
+            scene.materials.size() * sizeof(GpuMaterial)
+        );
+    }
+
+    m_bvhBuffer = CreateBuffer(
+        m_physicalDevice,
+        m_device,
+        m_bvhBufferBytes,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
+    std::memset(m_bvhBuffer.mapped, 0, static_cast<std::size_t>(m_bvhBufferBytes));
+    if (!scene.bvhNodes.empty())
+    {
+        std::memcpy(
+            m_bvhBuffer.mapped,
+            scene.bvhNodes.data(),
+            scene.bvhNodes.size() * sizeof(GpuBvhNode)
+        );
+    }
+
+    m_textureInfoBuffer = CreateBuffer(
+        m_physicalDevice,
+        m_device,
+        m_textureInfoBufferBytes,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
+    std::memset(
+        m_textureInfoBuffer.mapped,
+        0,
+        static_cast<std::size_t>(m_textureInfoBufferBytes)
+    );
+    if (!scene.textures.empty())
+    {
+        std::memcpy(
+            m_textureInfoBuffer.mapped,
+            scene.textures.data(),
+            scene.textures.size() * sizeof(GpuTextureInfo)
+        );
+    }
+
+    m_texturePixelBuffer = CreateBuffer(
+        m_physicalDevice,
+        m_device,
+        m_texturePixelBufferBytes,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
+    std::memset(
+        m_texturePixelBuffer.mapped,
+        0,
+        static_cast<std::size_t>(m_texturePixelBufferBytes)
+    );
+    if (!scene.texturePixels.empty())
+    {
+        std::memcpy(
+            m_texturePixelBuffer.mapped,
+            scene.texturePixels.data(),
+            scene.texturePixels.size() * sizeof(std::uint32_t)
+        );
     }
 
     m_overlayBuffer = CreateBuffer(
@@ -530,6 +636,30 @@ void VulkanRenderer::CreateDescriptorObjects()
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
         },
+        VkDescriptorSetLayoutBinding{
+            .binding = 5,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
+        VkDescriptorSetLayoutBinding{
+            .binding = 6,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
+        VkDescriptorSetLayoutBinding{
+            .binding = 7,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
+        VkDescriptorSetLayoutBinding{
+            .binding = 8,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
     };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {
@@ -546,6 +676,10 @@ void VulkanRenderer::CreateDescriptorObjects()
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
     };
@@ -920,6 +1054,26 @@ void VulkanRenderer::UpdateDescriptorSet()
         .offset = 0,
         .range = m_triangleBufferBytes,
     };
+    VkDescriptorBufferInfo materialInfo = {
+        .buffer = m_materialBuffer.buffer,
+        .offset = 0,
+        .range = m_materialBufferBytes,
+    };
+    VkDescriptorBufferInfo bvhInfo = {
+        .buffer = m_bvhBuffer.buffer,
+        .offset = 0,
+        .range = m_bvhBufferBytes,
+    };
+    VkDescriptorBufferInfo textureInfo = {
+        .buffer = m_textureInfoBuffer.buffer,
+        .offset = 0,
+        .range = m_textureInfoBufferBytes,
+    };
+    VkDescriptorBufferInfo texturePixelInfo = {
+        .buffer = m_texturePixelBuffer.buffer,
+        .offset = 0,
+        .range = m_texturePixelBufferBytes,
+    };
     VkDescriptorBufferInfo overlayInfo = {
         .buffer = m_overlayBuffer.buffer,
         .offset = 0,
@@ -966,6 +1120,38 @@ void VulkanRenderer::UpdateDescriptorSet()
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .pBufferInfo = &triangleInfo,
+        },
+        VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descriptorSet,
+            .dstBinding = 5,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &materialInfo,
+        },
+        VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descriptorSet,
+            .dstBinding = 6,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &bvhInfo,
+        },
+        VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descriptorSet,
+            .dstBinding = 7,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &textureInfo,
+        },
+        VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descriptorSet,
+            .dstBinding = 8,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &texturePixelInfo,
         },
     };
 

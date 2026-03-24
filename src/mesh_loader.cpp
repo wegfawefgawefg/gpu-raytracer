@@ -44,6 +44,21 @@ Float3 ReadPosition(const tinyobj::attrib_t& attrib, tinyobj::index_t index)
     };
 }
 
+Float3 ReadUv(const tinyobj::attrib_t& attrib, tinyobj::index_t index)
+{
+    if (index.texcoord_index < 0)
+    {
+        return {0.0f, 0.0f, 0.0f};
+    }
+
+    const int offset = 2 * index.texcoord_index;
+    return {
+        attrib.texcoords[static_cast<std::size_t>(offset)],
+        1.0f - attrib.texcoords[static_cast<std::size_t>(offset + 1)],
+        0.0f,
+    };
+}
+
 Float3 NormalizeVertex(
     const Float3& vertex,
     const Float3& center,
@@ -127,6 +142,8 @@ std::vector<GpuTriangle> LoadObjTriangles(const ObjMeshLoadParams& params)
             "Failed to load OBJ '" + path + "': " + error
         );
     }
+    (void)materials;
+    (void)warning;
 
     Float3 boundsMin = {
         std::numeric_limits<float>::max(),
@@ -185,18 +202,21 @@ std::vector<GpuTriangle> LoadObjTriangles(const ObjMeshLoadParams& params)
                 extent,
                 params
             );
+            const Float3 uvA = ReadUv(attrib, mesh.indices[indexOffset]);
+            const Float3 uvB = ReadUv(attrib, mesh.indices[indexOffset + 1]);
+            const Float3 uvC = ReadUv(attrib, mesh.indices[indexOffset + 2]);
 
             triangles.push_back({
                 .a = ToFloat4(a, 0.0f),
                 .b = ToFloat4(b, 0.0f),
                 .c = ToFloat4(c, 0.0f),
-                .albedoKind = {
-                    params.albedo.x,
-                    params.albedo.y,
-                    params.albedo.z,
-                    static_cast<float>(params.materialKind),
+                .uvAB = {uvA.x, uvA.y, uvB.x, uvB.y},
+                .uvCMaterial = {
+                    uvC.x,
+                    uvC.y,
+                    static_cast<float>(params.materialIndex),
+                    0.0f,
                 },
-                .emission = ToFloat4(params.emission, 0.0f),
             });
 
             indexOffset += 3;

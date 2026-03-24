@@ -66,10 +66,13 @@ add_custom_target(gpu-raytracer-shaders DEPENDS ${SHADER_OUTPUT} ${PRESENT_SHADE
 
 add_executable(gpu-raytracer
   src/app.cpp
+  src/bvh_builder.cpp
   src/camera.cpp
   src/loading_screen.cpp
   src/main.cpp
   src/mesh_loader.cpp
+  src/sample_scene.cpp
+  src/texture_loader.cpp
   src/vulkan_helpers.cpp
   src/vulkan_renderer.cpp
 )
@@ -99,6 +102,7 @@ target_compile_definitions(gpu-raytracer
     GPU_RAYTRACER_SHADER_PATH="${SHADER_OUTPUT}"
     GPU_PRESENT_SHADER_PATH="${PRESENT_SHADER_OUTPUT}"
     GPU_SAMPLE_MESH_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/viking_room.obj"
+    GPU_SAMPLE_TEXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/viking_room.png"
 )
 
 add_dependencies(gpu-raytracer gpu-raytracer-shaders)

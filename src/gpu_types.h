@@ -8,6 +8,7 @@
 constexpr std::uint32_t kOverlayBufferWidth = 512;
 constexpr std::uint32_t kOverlayBufferHeight = 64;
 constexpr std::uint32_t kOverlayPixelCount = kOverlayBufferWidth * kOverlayBufferHeight;
+constexpr std::uint32_t kInvalidTextureIndex = 0xFFFFFFFFu;
 
 enum class MaterialKind : std::uint32_t
 {
@@ -19,8 +20,7 @@ enum class MaterialKind : std::uint32_t
 struct alignas(16) GpuSphere
 {
     Float4 centerRadius;
-    Float4 albedoKind;
-    Float4 emission;
+    UInt4 materialIndex;
 };
 
 struct alignas(16) GpuTriangle
@@ -28,8 +28,27 @@ struct alignas(16) GpuTriangle
     Float4 a;
     Float4 b;
     Float4 c;
-    Float4 albedoKind;
+    Float4 uvAB;
+    Float4 uvCMaterial;
+};
+
+struct alignas(16) GpuMaterial
+{
+    Float4 albedoRoughness;
     Float4 emission;
+    UInt4 meta;
+};
+
+struct alignas(16) GpuBvhNode
+{
+    Float4 boundsMin;
+    Float4 boundsMax;
+    UInt4 meta;
+};
+
+struct alignas(16) GpuTextureInfo
+{
+    UInt4 sizeOffset;
 };
 
 struct alignas(16) GpuFrameParams
@@ -49,18 +68,15 @@ inline std::array<GpuSphere, 3> BuildDefaultScene()
     return {{
         {
             .centerRadius = {0.0f, -1001.0f, 0.0f, 1000.0f},
-            .albedoKind = {0.75f, 0.78f, 0.82f, static_cast<float>(MaterialKind::Diffuse)},
-            .emission = {0.0f, 0.0f, 0.0f, 0.0f},
+            .materialIndex = {0, 0, 0, 0},
         },
         {
             .centerRadius = {1.45f, 0.10f, 0.35f, 0.90f},
-            .albedoKind = {0.94f, 0.96f, 0.99f, static_cast<float>(MaterialKind::Mirror)},
-            .emission = {0.0f, 0.0f, 0.0f, 0.0f},
+            .materialIndex = {1, 0, 0, 0},
         },
         {
             .centerRadius = {0.0f, 2.8f, 1.4f, 0.50f},
-            .albedoKind = {1.0f, 0.98f, 0.95f, static_cast<float>(MaterialKind::Emissive)},
-            .emission = {18.0f, 17.0f, 15.0f, 0.0f},
+            .materialIndex = {2, 0, 0, 0},
         },
     }};
 }

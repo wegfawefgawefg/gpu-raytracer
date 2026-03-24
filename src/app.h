@@ -11,7 +11,7 @@
 #include "camera.h"
 #include "gpu_types.h"
 #include "loading_screen.h"
-#include "mesh_loader.h"
+#include "sample_scene.h"
 #include "vulkan_renderer.h"
 
 struct App
@@ -45,7 +45,6 @@ struct App
     Camera m_camera;
     LoadingScreen m_loadingScreen;
     VulkanRenderer m_renderer;
-    std::vector<GpuSphere> m_spheres;
-    std::vector<GpuTriangle> m_triangles;
+    SceneData m_scene;
     std::array<std::uint32_t, kOverlayPixelCount> m_overlayPixels = {};
 };

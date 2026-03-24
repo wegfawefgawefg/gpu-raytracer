@@ -2,11 +2,15 @@
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
+const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFFu;
+const uint MATERIAL_DIFFUSE = 0u;
+const uint MATERIAL_EMISSIVE = 1u;
+const uint MATERIAL_MIRROR = 2u;
+
 struct Sphere
 {
     vec4 centerRadius;
-    vec4 albedoKind;
-    vec4 emission;
+    uvec4 materialIndex;
 };
 
 struct Triangle
@@ -14,8 +18,27 @@ struct Triangle
     vec4 a;
     vec4 b;
     vec4 c;
-    vec4 albedoKind;
+    vec4 uvAB;
+    vec4 uvCMaterial;
+};
+
+struct Material
+{
+    vec4 albedoRoughness;
     vec4 emission;
+    uvec4 meta;
+};
+
+struct BvhNode
+{
+    vec4 boundsMin;
+    vec4 boundsMax;
+    uvec4 meta;
+};
+
+struct TextureInfo
+{
+    uvec4 sizeOffset;
 };
 
 layout(rgba8, binding = 0) uniform writeonly image2D outputImage;
@@ -43,15 +66,34 @@ layout(std430, binding = 4) readonly buffer TriangleBuffer
     Triangle triangles[];
 };
 
+layout(std430, binding = 5) readonly buffer MaterialBuffer
+{
+    Material materials[];
+};
+
+layout(std430, binding = 6) readonly buffer BvhBuffer
+{
+    BvhNode bvhNodes[];
+};
+
+layout(std430, binding = 7) readonly buffer TextureInfoBuffer
+{
+    TextureInfo textures[];
+};
+
+layout(std430, binding = 8) readonly buffer TexturePixelBuffer
+{
+    uint texturePixels[];
+};
+
 struct HitInfo
 {
     bool hit;
     float t;
     vec3 position;
     vec3 normal;
-    vec3 albedo;
-    vec3 emission;
-    int materialKind;
+    vec2 uv;
+    uint materialIndex;
 };
 
 struct ScatterInfo
@@ -62,8 +104,63 @@ struct ScatterInfo
     vec3 attenuation;
 };
 
-bool hitSphere(Sphere sphere, vec3 rayOrigin, vec3 rayDirection, float tMin, float tMax,
-               out HitInfo hit)
+vec4 unpackRgba8(uint packed)
+{
+    return vec4(
+        float(packed & 0xFFu),
+        float((packed >> 8u) & 0xFFu),
+        float((packed >> 16u) & 0xFFu),
+        float((packed >> 24u) & 0xFFu)
+    ) / 255.0;
+}
+
+vec3 sampleTextureColor(uint textureIndex, vec2 uv)
+{
+    if (textureIndex == INVALID_TEXTURE_INDEX)
+    {
+        return vec3(1.0);
+    }
+
+    TextureInfo texture = textures[textureIndex];
+    uvec2 size = texture.sizeOffset.xy;
+    uint offset = texture.sizeOffset.z;
+
+    vec2 wrapped = fract(uv);
+    if (wrapped.x < 0.0)
+    {
+        wrapped.x += 1.0;
+    }
+    if (wrapped.y < 0.0)
+    {
+        wrapped.y += 1.0;
+    }
+
+    uvec2 pixel = uvec2(
+        min(uint(floor(wrapped.x * float(size.x))), size.x - 1u),
+        min(uint(floor(wrapped.y * float(size.y))), size.y - 1u)
+    );
+    uint packed = texturePixels[offset + pixel.y * size.x + pixel.x];
+    return unpackRgba8(packed).rgb;
+}
+
+vec3 materialAlbedo(Material material, vec2 uv)
+{
+    vec3 albedo = material.albedoRoughness.xyz;
+    if (material.meta.y != INVALID_TEXTURE_INDEX)
+    {
+        albedo *= sampleTextureColor(material.meta.y, uv);
+    }
+    return albedo;
+}
+
+bool hitSphere(
+    Sphere sphere,
+    vec3 rayOrigin,
+    vec3 rayDirection,
+    float tMin,
+    float tMax,
+    out HitInfo hit
+)
 {
     vec3 oc = rayOrigin - sphere.centerRadius.xyz;
     float a = dot(rayDirection, rayDirection);
@@ -90,14 +187,19 @@ bool hitSphere(Sphere sphere, vec3 rayOrigin, vec3 rayDirection, float tMin, flo
     hit.t = root;
     hit.position = rayOrigin + root * rayDirection;
     hit.normal = normalize(hit.position - sphere.centerRadius.xyz);
-    hit.albedo = sphere.albedoKind.xyz;
-    hit.emission = sphere.emission.xyz;
-    hit.materialKind = int(round(sphere.albedoKind.w));
+    hit.uv = vec2(0.0);
+    hit.materialIndex = sphere.materialIndex.x;
     return true;
 }
 
-bool hitTriangle(Triangle triangle, vec3 rayOrigin, vec3 rayDirection, float tMin, float tMax,
-                 out HitInfo hit)
+bool hitTriangle(
+    Triangle triangle,
+    vec3 rayOrigin,
+    vec3 rayDirection,
+    float tMin,
+    float tMax,
+    out HitInfo hit
+)
 {
     vec3 edgeAB = triangle.b.xyz - triangle.a.xyz;
     vec3 edgeAC = triangle.c.xyz - triangle.a.xyz;
@@ -129,20 +231,92 @@ bool hitTriangle(Triangle triangle, vec3 rayOrigin, vec3 rayDirection, float tMi
         return false;
     }
 
-    vec3 outwardNormal = normalize(cross(edgeAB, edgeAC));
-    if (dot(rayDirection, outwardNormal) > 0.0)
+    vec3 normal = normalize(cross(edgeAB, edgeAC));
+    if (dot(rayDirection, normal) > 0.0)
     {
-        outwardNormal = -outwardNormal;
+        normal = -normal;
     }
+
+    vec2 uvA = triangle.uvAB.xy;
+    vec2 uvB = triangle.uvAB.zw;
+    vec2 uvC = triangle.uvCMaterial.xy;
+    float w = 1.0 - u - v;
 
     hit.hit = true;
     hit.t = root;
     hit.position = rayOrigin + root * rayDirection;
-    hit.normal = outwardNormal;
-    hit.albedo = triangle.albedoKind.xyz;
-    hit.emission = triangle.emission.xyz;
-    hit.materialKind = int(round(triangle.albedoKind.w));
+    hit.normal = normal;
+    hit.uv = uvA * w + uvB * u + uvC * v;
+    hit.materialIndex = uint(round(triangle.uvCMaterial.z));
     return true;
+}
+
+bool hitAabb(BvhNode node, vec3 rayOrigin, vec3 rayDirection, float tMax)
+{
+    vec3 invDirection = 1.0 / rayDirection;
+    vec3 t0 = (node.boundsMin.xyz - rayOrigin) * invDirection;
+    vec3 t1 = (node.boundsMax.xyz - rayOrigin) * invDirection;
+    vec3 tMin3 = min(t0, t1);
+    vec3 tMax3 = max(t0, t1);
+    float tMin = max(max(tMin3.x, tMin3.y), max(tMin3.z, 0.001));
+    float tExit = min(min(tMax3.x, tMax3.y), tMax3.z);
+    return tExit >= tMin && tMin <= tMax;
+}
+
+bool traceTriangles(vec3 rayOrigin, vec3 rayDirection, inout HitInfo hit)
+{
+    int nodeCount = int(round(params.sceneInfo.y));
+    if (nodeCount <= 0)
+    {
+        return false;
+    }
+
+    uint stack[64];
+    uint stackSize = 0u;
+    stack[stackSize++] = 0u;
+    bool hitAny = false;
+
+    while (stackSize > 0u)
+    {
+        BvhNode node = bvhNodes[stack[--stackSize]];
+        if (!hitAabb(node, rayOrigin, rayDirection, hit.t))
+        {
+            continue;
+        }
+
+        if (node.meta.z != 0u)
+        {
+            uint firstTriangle = node.meta.x;
+            uint triangleCount = node.meta.y;
+            for (uint index = 0u; index < triangleCount; ++index)
+            {
+                HitInfo candidate;
+                if (hitTriangle(
+                        triangles[firstTriangle + index],
+                        rayOrigin,
+                        rayDirection,
+                        0.001,
+                        hit.t,
+                        candidate
+                    ))
+                {
+                    hit = candidate;
+                    hitAny = true;
+                }
+            }
+            continue;
+        }
+
+        if (stackSize + 2u > 64u)
+        {
+            continue;
+        }
+
+        stack[stackSize++] = node.meta.x;
+        stack[stackSize++] = node.meta.y;
+    }
+
+    return hitAny;
 }
 
 bool traceScene(vec3 rayOrigin, vec3 rayDirection, out HitInfo hit)
@@ -160,16 +334,7 @@ bool traceScene(vec3 rayOrigin, vec3 rayDirection, out HitInfo hit)
         }
     }
 
-    int triangleCount = int(round(params.sceneInfo.x));
-    for (int index = 0; index < triangleCount; ++index)
-    {
-        HitInfo candidate;
-        if (hitTriangle(triangles[index], rayOrigin, rayDirection, 0.001, hit.t, candidate))
-        {
-            hit = candidate;
-        }
-    }
-
+    traceTriangles(rayOrigin, rayDirection, hit);
     return hit.hit;
 }
 
@@ -220,7 +385,8 @@ bool findPrimaryLight(out Sphere lightSphere)
     int sphereCount = int(round(params.renderInfo.w));
     for (int index = 0; index < sphereCount; ++index)
     {
-        if (int(round(spheres[index].albedoKind.w)) == 1)
+        Material material = materials[spheres[index].materialIndex.x];
+        if (material.meta.x == MATERIAL_EMISSIVE)
         {
             lightSphere = spheres[index];
             return true;
@@ -230,14 +396,16 @@ bool findPrimaryLight(out Sphere lightSphere)
     return false;
 }
 
-vec3 shade(HitInfo hit)
+vec3 shade(HitInfo hit, Material material)
 {
     Sphere lightSphere;
+    vec3 albedo = materialAlbedo(material, hit.uv);
     if (!findPrimaryLight(lightSphere))
     {
-        return 0.06 * hit.albedo;
+        return 0.06 * albedo;
     }
 
+    Material lightMaterial = materials[lightSphere.materialIndex.x];
     vec3 lightCenter = lightSphere.centerRadius.xyz;
     vec3 toLight = lightCenter - hit.position;
     float lightDistance = length(toLight);
@@ -248,18 +416,23 @@ vec3 shade(HitInfo hit)
                     shadowHit.t < lightDistance - lightSphere.centerRadius.w;
 
     float ndotl = max(dot(hit.normal, lightDirection), 0.0);
-    vec3 ambient = 0.06 * hit.albedo;
+    vec3 ambient = 0.06 * albedo;
     vec3 direct = vec3(0.0);
     if (!inShadow)
     {
         float attenuation = 1.0 / max(lightDistance * lightDistance, 0.01);
-        direct = hit.albedo * lightSphere.emission.xyz * ndotl * attenuation;
+        direct = albedo * lightMaterial.emission.xyz * ndotl * attenuation;
     }
 
     return ambient + direct;
 }
 
-ScatterInfo scatterRay(HitInfo hit, vec3 rayDirection, inout uint rngState)
+ScatterInfo scatterRay(
+    HitInfo hit,
+    Material material,
+    vec3 rayDirection,
+    inout uint rngState
+)
 {
     ScatterInfo scatter;
     scatter.continueTrace = false;
@@ -267,19 +440,20 @@ ScatterInfo scatterRay(HitInfo hit, vec3 rayDirection, inout uint rngState)
     scatter.nextDirection = vec3(0.0);
     scatter.attenuation = vec3(1.0);
 
-    if (hit.materialKind == 0)
+    vec3 albedo = materialAlbedo(material, hit.uv);
+    if (material.meta.x == MATERIAL_DIFFUSE)
     {
         scatter.continueTrace = true;
         scatter.nextDirection = cosineHemisphere(rngState, hit.normal);
-        scatter.attenuation = hit.albedo;
+        scatter.attenuation = albedo;
         return scatter;
     }
 
-    if (hit.materialKind == 2)
+    if (material.meta.x == MATERIAL_MIRROR)
     {
         scatter.continueTrace = true;
         scatter.nextDirection = normalize(reflect(rayDirection, hit.normal));
-        scatter.attenuation = hit.albedo;
+        scatter.attenuation = albedo;
         return scatter;
     }
 
@@ -319,14 +493,15 @@ void main()
             break;
         }
 
-        color += throughput * hit.emission;
+        Material material = materials[hit.materialIndex];
+        color += throughput * material.emission.xyz;
 
-        if (hit.materialKind == 0)
+        if (material.meta.x == MATERIAL_DIFFUSE)
         {
-            color += throughput * shade(hit);
+            color += throughput * shade(hit, material);
         }
 
-        ScatterInfo scatter = scatterRay(hit, rayDirection, rngState);
+        ScatterInfo scatter = scatterRay(hit, material, rayDirection, rngState);
         if (!scatter.continueTrace)
         {
             break;

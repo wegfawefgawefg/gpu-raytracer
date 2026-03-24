@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 
 struct Float3
 {
@@ -15,6 +16,14 @@ struct alignas(16) Float4
     float y = 0.0f;
     float z = 0.0f;
     float w = 0.0f;
+};
+
+struct alignas(16) UInt4
+{
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t z = 0;
+    std::uint32_t w = 0;
 };
 
 inline Float3 operator+(const Float3& a, const Float3& b)

@@ -12,6 +12,7 @@ namespace
 constexpr std::string_view kWindowTitle = "gpu-raytracer";
 constexpr std::string_view kUiFontPath = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
 constexpr std::string_view kSampleMeshPath = GPU_SAMPLE_MESH_PATH;
+constexpr std::string_view kSampleTexturePath = GPU_SAMPLE_TEXTURE_PATH;
 constexpr int kInitialWindowWidth = 1440;
 constexpr int kInitialWindowHeight = 900;
 constexpr std::string_view kX11DialogWindowType = "_NET_WM_WINDOW_TYPE_DIALOG";
@@ -90,8 +91,8 @@ void App::Run()
         GpuFrameParams params = m_camera.BuildFrameParams(
             m_renderWidth,
             m_renderHeight,
-            m_spheres.size(),
-            m_triangles.size()
+            m_scene.spheres.size(),
+            m_scene.triangles.size()
         );
         params.renderInfo.z = static_cast<float>(m_windowWidth);
         params.frameInfo.w = static_cast<float>(m_windowHeight);
@@ -101,6 +102,13 @@ void App::Run()
                 static_cast<float>(m_overlayHeight),
                 16.0f,
                 16.0f,
+            };
+        params.sceneInfo =
+            {
+                static_cast<float>(m_scene.triangles.size()),
+                static_cast<float>(m_scene.bvhNodes.size()),
+                static_cast<float>(m_scene.materials.size()),
+                static_cast<float>(m_scene.textures.size()),
             };
         m_renderer.Render(params, m_overlayPixels);
     }
@@ -137,26 +145,14 @@ void App::Initialize()
         throw std::runtime_error("TTF_OpenFont failed");
     }
 
-    const auto defaultSpheres = BuildDefaultScene();
-    m_spheres.assign(defaultSpheres.begin(), defaultSpheres.end());
-    m_triangles = LoadObjTriangles({
-        .path = kSampleMeshPath,
-        .position = {0.0f, 0.10f, 0.0f},
-        .scale = {2.5f, 2.5f, 2.5f},
-        .rotationDegrees = {-90.0f, 0.0f, 0.0f},
-        .normalize = true,
-        .albedo = {0.78f, 0.80f, 0.84f},
-        .materialKind = MaterialKind::Diffuse,
-        .emission = {0.0f, 0.0f, 0.0f},
-    });
+    m_scene = BuildSampleScene(kSampleMeshPath, kSampleTexturePath);
 
     CenterWindowOnPrimaryDisplay(m_window);
     m_loadingScreen.Attach(m_window);
     m_loadingScreen.Update("Booting SDL window...", 0.08f);
     m_renderer.Initialize(
         m_window,
-        m_spheres,
-        m_triangles,
+        m_scene,
         [this](std::string_view message, float progress)
         { m_loadingScreen.Update(message, progress); }
     );
