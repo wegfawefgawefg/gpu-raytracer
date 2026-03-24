@@ -12,7 +12,6 @@ namespace
 constexpr std::uint32_t kWorkgroupSize = 16;
 constexpr VkFormat kAccumulationFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
 constexpr VkFormat kRenderTargetFormat = VK_FORMAT_R8G8B8A8_UNORM;
-constexpr std::size_t kMaxSphereBytes = sizeof(GpuSphere) * 64;
 constexpr std::size_t kMaxOverlayBytes = sizeof(std::uint32_t) * kOverlayPixelCount;
 constexpr const char* kShaderPath = GPU_RAYTRACER_SHADER_PATH;
 constexpr const char* kPresentShaderPath = GPU_PRESENT_SHADER_PATH;
@@ -70,6 +69,7 @@ VulkanRenderer::~VulkanRenderer()
 void VulkanRenderer::Initialize(
     SDL_Window* window,
     std::span<const GpuSphere> spheres,
+    std::span<const GpuTriangle> triangles,
     InitProgressFn progress
 )
 {
@@ -106,7 +106,7 @@ void VulkanRenderer::Initialize(
     {
         progress("Uploading scene buffers...", 0.74f);
     }
-    CreateStaticBuffers(spheres);
+    CreateStaticBuffers(spheres, triangles);
     if (progress)
     {
         progress("Building descriptor sets...", 0.82f);
@@ -174,6 +174,7 @@ void VulkanRenderer::Shutdown()
     }
 
     DestroyBuffer(m_device, m_sphereBuffer);
+    DestroyBuffer(m_device, m_triangleBuffer);
     DestroyBuffer(m_device, m_overlayBuffer);
     DestroyBuffer(m_device, m_paramsBuffer);
 
@@ -438,8 +439,17 @@ void VulkanRenderer::CreateSyncObjects()
     CheckVk(vkCreateFence(m_device, &fenceInfo, nullptr, &m_frameFence), "vkCreateFence");
 }
 
-void VulkanRenderer::CreateStaticBuffers(std::span<const GpuSphere> spheres)
+void VulkanRenderer::CreateStaticBuffers(
+    std::span<const GpuSphere> spheres,
+    std::span<const GpuTriangle> triangles
+)
 {
+    m_sphereCount = static_cast<std::uint32_t>(spheres.size());
+    m_triangleCount = static_cast<std::uint32_t>(triangles.size());
+    m_sphereBufferBytes = std::max<VkDeviceSize>(spheres.size_bytes(), sizeof(GpuSphere));
+    m_triangleBufferBytes =
+        std::max<VkDeviceSize>(triangles.size_bytes(), sizeof(GpuTriangle));
+
     m_paramsBuffer = CreateBuffer(
         m_physicalDevice,
         m_device,
@@ -452,12 +462,30 @@ void VulkanRenderer::CreateStaticBuffers(std::span<const GpuSphere> spheres)
     m_sphereBuffer = CreateBuffer(
         m_physicalDevice,
         m_device,
-        kMaxSphereBytes,
+        m_sphereBufferBytes,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         true
     );
-    std::memcpy(m_sphereBuffer.mapped, spheres.data(), spheres.size_bytes());
+    std::memset(m_sphereBuffer.mapped, 0, static_cast<std::size_t>(m_sphereBufferBytes));
+    if (!spheres.empty())
+    {
+        std::memcpy(m_sphereBuffer.mapped, spheres.data(), spheres.size_bytes());
+    }
+
+    m_triangleBuffer = CreateBuffer(
+        m_physicalDevice,
+        m_device,
+        m_triangleBufferBytes,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
+    std::memset(m_triangleBuffer.mapped, 0, static_cast<std::size_t>(m_triangleBufferBytes));
+    if (!triangles.empty())
+    {
+        std::memcpy(m_triangleBuffer.mapped, triangles.data(), triangles.size_bytes());
+    }
 
     m_overlayBuffer = CreateBuffer(
         m_physicalDevice,
@@ -496,6 +524,12 @@ void VulkanRenderer::CreateDescriptorObjects()
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
         },
+        VkDescriptorSetLayoutBinding{
+            .binding = 4,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
     };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {
@@ -512,6 +546,7 @@ void VulkanRenderer::CreateDescriptorObjects()
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
     };
     VkDescriptorPoolCreateInfo poolInfo = {
@@ -878,7 +913,12 @@ void VulkanRenderer::UpdateDescriptorSet()
     VkDescriptorBufferInfo sphereInfo = {
         .buffer = m_sphereBuffer.buffer,
         .offset = 0,
-        .range = kMaxSphereBytes,
+        .range = m_sphereBufferBytes,
+    };
+    VkDescriptorBufferInfo triangleInfo = {
+        .buffer = m_triangleBuffer.buffer,
+        .offset = 0,
+        .range = m_triangleBufferBytes,
     };
     VkDescriptorBufferInfo overlayInfo = {
         .buffer = m_overlayBuffer.buffer,
@@ -918,6 +958,14 @@ void VulkanRenderer::UpdateDescriptorSet()
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .pBufferInfo = &sphereInfo,
+        },
+        VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descriptorSet,
+            .dstBinding = 4,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &triangleInfo,
         },
     };
 

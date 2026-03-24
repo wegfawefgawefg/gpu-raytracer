@@ -6,14 +6,14 @@ It is intentionally about the current code, not about an ideal future design.
 
 ## What It Does Today
 
-The program opens an SDL3 window, creates a Vulkan swapchain, runs a compute shader that raytraces a tiny hardcoded sphere scene into an offscreen image, and then blits that image into the swapchain image for presentation.
+The program opens an SDL3 window, creates a Vulkan swapchain, runs a compute shader that path traces a small mixed scene into an offscreen image, and then composites a native-resolution UI pass before presenting to the swapchain.
 
 The scene currently has:
 
 - a giant ground sphere
-- one diffuse red sphere
 - one mirror sphere
 - one emissive light sphere
+- one OBJ mesh loaded on the CPU and uploaded as flat GPU triangles
 
 The camera is controlled on the CPU side and its state is uploaded to the GPU every frame.
 
@@ -43,6 +43,8 @@ These are the important files:
 - [`src/camera.cpp`](/home/vega/Coding/Graphics/gpu-raytracer/src/camera.cpp): camera position/orientation and movement
 - [`src/gpu_types.h`](/home/vega/Coding/Graphics/gpu-raytracer/src/gpu_types.h): structs shared conceptually between CPU scene setup and shader-side expectations
 - [`src/math_types.h`](/home/vega/Coding/Graphics/gpu-raytracer/src/math_types.h): tiny local vector math helpers
+- [`src/mesh_loader.h`](/home/vega/Coding/Graphics/gpu-raytracer/src/mesh_loader.h)
+- [`src/mesh_loader.cpp`](/home/vega/Coding/Graphics/gpu-raytracer/src/mesh_loader.cpp): OBJ loading into a flat triangle array
 - [`src/vulkan_helpers.h`](/home/vega/Coding/Graphics/gpu-raytracer/src/vulkan_helpers.h)
 - [`src/vulkan_helpers.cpp`](/home/vega/Coding/Graphics/gpu-raytracer/src/vulkan_helpers.cpp): file loading, Vulkan checks, buffer/image allocation
 - [`src/vulkan_renderer.h`](/home/vega/Coding/Graphics/gpu-raytracer/src/vulkan_renderer.h)
@@ -125,6 +127,20 @@ This is already a GPU-style layout:
 - no virtual dispatch
 
 That is a major architectural difference from a typical CPU raytracer object graph.
+
+`GpuTriangle` follows the same idea:
+
+- three explicit vertices
+- one packed material tag/color record
+- one emission record
+
+The current mesh path is intentionally brute force:
+
+- CPU loads one OBJ
+- CPU flattens it to `GpuTriangle[]`
+- GPU loops over every triangle
+
+That is not scalable, but it is the correct first mesh step before BVH work.
 
 ## Frame Parameters
 
@@ -280,13 +296,13 @@ This is the GPU version of camera ray generation.
 
 ## Scene Intersection
 
-`traceScene()` just loops over all spheres and keeps the nearest hit.
+`traceScene()` loops over all spheres and all uploaded triangles and keeps the nearest hit.
 
 That means:
 
 - no BVH yet
-- no mesh support yet
-- O(n) intersection over the sphere list
+- mesh support exists now
+- O(n) intersection over the sphere and triangle lists
 
 This is fine for the current teaching-stage renderer.
 
@@ -302,15 +318,13 @@ Diffuse lighting currently uses a very simple direct-light model.
 
 For diffuse surfaces:
 
-1. pick the emissive sphere as the light source
+1. find the emissive sphere and use it as the light source
 2. compute direction and distance to it
 3. cast a shadow ray
 4. if not shadowed, add Lambert-like direct lighting with inverse-square attenuation
 5. add a small ambient term
 
-This is not yet a Monte Carlo path tracer.
-
-It is a direct-light teaching step that gets something readable on screen while the compute architecture stays simple.
+The diffuse path now also continues stochastically under accumulation, so this is already a small progressive path tracer, just with a very simple direct-light model.
 
 ## Reflections
 
@@ -329,7 +343,7 @@ For each bounce:
 1. intersect the scene
 2. if miss, add sky times throughput and stop
 3. add surface emission times throughput
-4. if diffuse, add direct lighting and stop
+4. if diffuse, add direct lighting and sample a new bounce direction
 5. if mirror, reflect the ray and continue
 
 This is the beginning of the standard GPU path-tracing structure:
@@ -363,15 +377,13 @@ Several things are intentionally minimal right now:
 - one command buffer
 - one frame in flight
 - no BVH
-- no accumulation
-- no random sampling
-- no diffuse bounce continuation
 - no material roughness / refraction
-- no mesh data
+- no texture sampling yet
+- no triangle acceleration structure yet
 
-So this is not yet a full GPU path tracer.
+So this is not yet a full GPU path tracer, but it is now past the “spheres only” stage.
 
-It is a clean first compute-raytracing skeleton.
+It is a clean first compute-raytracing skeleton with a real mesh path.
 
 ## Good Questions To Ask While Reading
 
@@ -391,11 +403,10 @@ Those are the next real architectural jumps from the current code.
 
 If the goal is to keep building this in learning order, the next topics should be:
 
-1. progressive accumulation
-2. random number state per pixel
-3. diffuse bounce sampling
-4. separating direct light from indirect bounce logic
-5. triangles and mesh buffers
-6. BVH traversal
+1. BVH traversal for the new triangle path
+2. cleaner material records
+3. texture uploads and texture sampling
+4. more material models
+5. better direct light sampling
 
 That sequence keeps the renderer understandable while steadily moving it toward a real GPU path tracer.

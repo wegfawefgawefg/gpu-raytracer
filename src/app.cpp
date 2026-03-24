@@ -11,6 +11,7 @@ namespace
 {
 constexpr std::string_view kWindowTitle = "gpu-raytracer";
 constexpr std::string_view kUiFontPath = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+constexpr std::string_view kSampleMeshPath = GPU_SAMPLE_MESH_PATH;
 constexpr int kInitialWindowWidth = 1440;
 constexpr int kInitialWindowHeight = 900;
 constexpr std::string_view kX11DialogWindowType = "_NET_WM_WINDOW_TYPE_DIALOG";
@@ -86,8 +87,12 @@ void App::Run()
             m_overlayRefreshSeconds = kOverlayRefreshPeriod;
         }
 
-        GpuFrameParams params =
-            m_camera.BuildFrameParams(m_renderWidth, m_renderHeight, m_spheres.size());
+        GpuFrameParams params = m_camera.BuildFrameParams(
+            m_renderWidth,
+            m_renderHeight,
+            m_spheres.size(),
+            m_triangles.size()
+        );
         params.renderInfo.z = static_cast<float>(m_windowWidth);
         params.frameInfo.w = static_cast<float>(m_windowHeight);
         params.overlayInfo =
@@ -132,12 +137,25 @@ void App::Initialize()
         throw std::runtime_error("TTF_OpenFont failed");
     }
 
+    const auto defaultSpheres = BuildDefaultScene();
+    m_spheres.assign(defaultSpheres.begin(), defaultSpheres.end());
+    m_triangles = LoadObjTriangles({
+        .path = kSampleMeshPath,
+        .position = {0.0f, 0.10f, 0.0f},
+        .scale = {2.5f, 2.5f, 2.5f},
+        .normalize = true,
+        .albedo = {0.78f, 0.80f, 0.84f},
+        .materialKind = MaterialKind::Diffuse,
+        .emission = {0.0f, 0.0f, 0.0f},
+    });
+
     CenterWindowOnPrimaryDisplay(m_window);
     m_loadingScreen.Attach(m_window);
     m_loadingScreen.Update("Booting SDL window...", 0.08f);
     m_renderer.Initialize(
         m_window,
         m_spheres,
+        m_triangles,
         [this](std::string_view message, float progress)
         { m_loadingScreen.Update(message, progress); }
     );

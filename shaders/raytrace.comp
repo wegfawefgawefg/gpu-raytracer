@@ -9,6 +9,15 @@ struct Sphere
     vec4 emission;
 };
 
+struct Triangle
+{
+    vec4 a;
+    vec4 b;
+    vec4 c;
+    vec4 albedoKind;
+    vec4 emission;
+};
+
 layout(rgba8, binding = 0) uniform writeonly image2D outputImage;
 layout(rgba32f, binding = 1) uniform image2D accumulationImage;
 
@@ -21,11 +30,17 @@ layout(std140, binding = 2) uniform FrameParams
     vec4 renderInfo;
     vec4 frameInfo;
     vec4 overlayInfo;
+    vec4 sceneInfo;
 } params;
 
 layout(std430, binding = 3) readonly buffer SphereBuffer
 {
     Sphere spheres[];
+};
+
+layout(std430, binding = 4) readonly buffer TriangleBuffer
+{
+    Triangle triangles[];
 };
 
 struct HitInfo
@@ -81,6 +96,55 @@ bool hitSphere(Sphere sphere, vec3 rayOrigin, vec3 rayDirection, float tMin, flo
     return true;
 }
 
+bool hitTriangle(Triangle triangle, vec3 rayOrigin, vec3 rayDirection, float tMin, float tMax,
+                 out HitInfo hit)
+{
+    vec3 edgeAB = triangle.b.xyz - triangle.a.xyz;
+    vec3 edgeAC = triangle.c.xyz - triangle.a.xyz;
+    vec3 p = cross(rayDirection, edgeAC);
+    float determinant = dot(edgeAB, p);
+    if (abs(determinant) < 1e-6)
+    {
+        return false;
+    }
+
+    float inverseDeterminant = 1.0 / determinant;
+    vec3 t = rayOrigin - triangle.a.xyz;
+    float u = dot(t, p) * inverseDeterminant;
+    if (u < 0.0 || u > 1.0)
+    {
+        return false;
+    }
+
+    vec3 q = cross(t, edgeAB);
+    float v = dot(rayDirection, q) * inverseDeterminant;
+    if (v < 0.0 || u + v > 1.0)
+    {
+        return false;
+    }
+
+    float root = dot(edgeAC, q) * inverseDeterminant;
+    if (root < tMin || root > tMax)
+    {
+        return false;
+    }
+
+    vec3 outwardNormal = normalize(cross(edgeAB, edgeAC));
+    if (dot(rayDirection, outwardNormal) > 0.0)
+    {
+        outwardNormal = -outwardNormal;
+    }
+
+    hit.hit = true;
+    hit.t = root;
+    hit.position = rayOrigin + root * rayDirection;
+    hit.normal = outwardNormal;
+    hit.albedo = triangle.albedoKind.xyz;
+    hit.emission = triangle.emission.xyz;
+    hit.materialKind = int(round(triangle.albedoKind.w));
+    return true;
+}
+
 bool traceScene(vec3 rayOrigin, vec3 rayDirection, out HitInfo hit)
 {
     hit.hit = false;
@@ -91,6 +155,16 @@ bool traceScene(vec3 rayOrigin, vec3 rayDirection, out HitInfo hit)
     {
         HitInfo candidate;
         if (hitSphere(spheres[index], rayOrigin, rayDirection, 0.001, hit.t, candidate))
+        {
+            hit = candidate;
+        }
+    }
+
+    int triangleCount = int(round(params.sceneInfo.x));
+    for (int index = 0; index < triangleCount; ++index)
+    {
+        HitInfo candidate;
+        if (hitTriangle(triangles[index], rayOrigin, rayDirection, 0.001, hit.t, candidate))
         {
             hit = candidate;
         }
@@ -141,9 +215,29 @@ vec3 cosineHemisphere(inout uint state, vec3 normal)
     return normalize(normal + sampleDir);
 }
 
+bool findPrimaryLight(out Sphere lightSphere)
+{
+    int sphereCount = int(round(params.renderInfo.w));
+    for (int index = 0; index < sphereCount; ++index)
+    {
+        if (int(round(spheres[index].albedoKind.w)) == 1)
+        {
+            lightSphere = spheres[index];
+            return true;
+        }
+    }
+
+    return false;
+}
+
 vec3 shade(HitInfo hit)
 {
-    Sphere lightSphere = spheres[3];
+    Sphere lightSphere;
+    if (!findPrimaryLight(lightSphere))
+    {
+        return 0.06 * hit.albedo;
+    }
+
     vec3 lightCenter = lightSphere.centerRadius.xyz;
     vec3 toLight = lightCenter - hit.position;
     float lightDistance = length(toLight);

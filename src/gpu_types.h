@@ -23,6 +23,15 @@ struct alignas(16) GpuSphere
     Float4 emission;
 };
 
+struct alignas(16) GpuTriangle
+{
+    Float4 a;
+    Float4 b;
+    Float4 c;
+    Float4 albedoKind;
+    Float4 emission;
+};
+
 struct alignas(16) GpuFrameParams
 {
     Float4 cameraPosition;
@@ -32,9 +41,10 @@ struct alignas(16) GpuFrameParams
     Float4 renderInfo;
     Float4 frameInfo;
     Float4 overlayInfo;
+    Float4 sceneInfo;
 };
 
-inline std::array<GpuSphere, 4> BuildDefaultScene()
+inline std::array<GpuSphere, 3> BuildDefaultScene()
 {
     return {{
         {
@@ -43,17 +53,12 @@ inline std::array<GpuSphere, 4> BuildDefaultScene()
             .emission = {0.0f, 0.0f, 0.0f, 0.0f},
         },
         {
-            .centerRadius = {1.15f, 0.05f, -0.25f, 1.0f},
+            .centerRadius = {1.45f, 0.10f, 0.35f, 0.90f},
             .albedoKind = {0.94f, 0.96f, 0.99f, static_cast<float>(MaterialKind::Mirror)},
             .emission = {0.0f, 0.0f, 0.0f, 0.0f},
         },
         {
-            .centerRadius = {-1.15f, 0.05f, -0.25f, 1.0f},
-            .albedoKind = {0.94f, 0.96f, 0.99f, static_cast<float>(MaterialKind::Mirror)},
-            .emission = {0.0f, 0.0f, 0.0f, 0.0f},
-        },
-        {
-            .centerRadius = {1.6f, 3.0f, 1.0f, 0.45f},
+            .centerRadius = {0.0f, 2.8f, 1.4f, 0.50f},
             .albedoKind = {1.0f, 0.98f, 0.95f, static_cast<float>(MaterialKind::Emissive)},
             .emission = {18.0f, 17.0f, 15.0f, 0.0f},
         },

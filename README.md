@@ -7,9 +7,11 @@ GPU-native raytracer playground. `raytrace-rs` is the CPU-side reference for sce
 - CMake + Ninja build
 - Clang toolchain
 - Vendored SDL3 through CMake `FetchContent`
+- Vendored SDL3_ttf for native-resolution text overlay
 - SDL3 floating window on X11/i3
 - Vulkan swapchain + compute shader raytracing path
-- Basic sphere scene with movable camera
+- Progressive accumulation path tracer with movable camera
+- Sphere scene plus first OBJ mesh path through a flat triangle buffer
 - VS Code `F5` build + launch flow
 
 ## Build
@@ -38,6 +40,6 @@ That runs the `build` task, then launches `build/debug/gpu-raytracer` under `gdb
 
 ## Next Steps
 
-- Replace the hardcoded teaching scene with editable CPU-side scene buffers
-- Add reflections, multiple bounces, and accumulation
-- Add triangles / mesh data and then a GPU-friendly BVH
+- Add a GPU-friendly BVH for the new triangle path
+- Split geometry/material data more cleanly now that meshes exist
+- Add texture uploads and textured material sampling

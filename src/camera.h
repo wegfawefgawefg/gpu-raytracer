@@ -13,7 +13,8 @@ struct Camera
     GpuFrameParams BuildFrameParams(
         std::uint32_t renderWidth,
         std::uint32_t renderHeight,
-        std::uint32_t sphereCount
+        std::uint32_t sphereCount,
+        std::uint32_t triangleCount
     ) const;
     Float3 GetForward() const;
     Float3 GetRight() const;

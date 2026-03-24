@@ -69,6 +69,7 @@ add_executable(gpu-raytracer
   src/camera.cpp
   src/loading_screen.cpp
   src/main.cpp
+  src/mesh_loader.cpp
   src/vulkan_helpers.cpp
   src/vulkan_renderer.cpp
 )
@@ -97,6 +98,7 @@ target_compile_definitions(gpu-raytracer
   PRIVATE
     GPU_RAYTRACER_SHADER_PATH="${SHADER_OUTPUT}"
     GPU_PRESENT_SHADER_PATH="${PRESENT_SHADER_OUTPUT}"
+    GPU_SAMPLE_MESH_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/viking_room.obj"
 )
 
 add_dependencies(gpu-raytracer gpu-raytracer-shaders)

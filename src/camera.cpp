@@ -65,7 +65,8 @@ bool Camera::UpdateMovement(const bool* keys, float deltaSeconds)
 GpuFrameParams Camera::BuildFrameParams(
     std::uint32_t renderWidth,
     std::uint32_t renderHeight,
-    std::uint32_t sphereCount
+    std::uint32_t sphereCount,
+    std::uint32_t triangleCount
 ) const
 {
     const Float3 forward = GetForward();
@@ -90,6 +91,7 @@ GpuFrameParams Camera::BuildFrameParams(
             },
         .frameInfo = {0.0f, 0.0f, 0.0f, 0.0f},
         .overlayInfo = {0.0f, 0.0f, 16.0f, 16.0f},
+        .sceneInfo = {static_cast<float>(triangleCount), 0.0f, 0.0f, 0.0f},
     };
 }
 

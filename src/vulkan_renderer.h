@@ -22,6 +22,7 @@ struct VulkanRenderer
     void Initialize(
         SDL_Window* window,
         std::span<const GpuSphere> spheres,
+        std::span<const GpuTriangle> triangles,
         InitProgressFn progress = {}
     );
     void Shutdown();
@@ -41,7 +42,10 @@ struct VulkanRenderer
     void CreateDevice();
     void CreateCommandObjects();
     void CreateSyncObjects();
-    void CreateStaticBuffers(std::span<const GpuSphere> spheres);
+    void CreateStaticBuffers(
+        std::span<const GpuSphere> spheres,
+        std::span<const GpuTriangle> triangles
+    );
     void CreateDescriptorObjects();
     void CreatePresentDescriptorObjects();
     void CreateComputePipeline();
@@ -79,6 +83,7 @@ struct VulkanRenderer
     BufferResource m_paramsBuffer;
     BufferResource m_overlayBuffer;
     BufferResource m_sphereBuffer;
+    BufferResource m_triangleBuffer;
     ImageResource m_accumulationTarget;
     ImageResource m_presentTarget;
     ImageResource m_renderTarget;
@@ -99,6 +104,10 @@ struct VulkanRenderer
     std::uint32_t m_renderWidth = 0;
     std::uint32_t m_renderHeight = 0;
     std::uint32_t m_accumulatedFrames = 0;
+    std::uint32_t m_sphereCount = 0;
+    std::uint32_t m_triangleCount = 0;
+    VkDeviceSize m_sphereBufferBytes = 0;
+    VkDeviceSize m_triangleBufferBytes = 0;
     bool m_renderTargetPrimed = false;
     bool m_accumulationPrimed = false;
 };
