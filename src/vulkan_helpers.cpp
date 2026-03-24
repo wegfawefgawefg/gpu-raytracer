@@ -7,8 +7,9 @@ void CheckVk(VkResult result, std::string_view context)
 {
     if (result != VK_SUCCESS)
     {
-        throw std::runtime_error(std::string(context) + " failed with VkResult " +
-                                 std::to_string(result));
+        throw std::runtime_error(
+            std::string(context) + " failed with VkResult " + std::to_string(result)
+        );
     }
 }
 
@@ -27,8 +28,11 @@ std::vector<std::byte> ReadBinaryFile(std::string_view path)
     return bytes;
 }
 
-std::uint32_t FindMemoryType(VkPhysicalDevice physicalDevice, std::uint32_t typeBits,
-                             VkMemoryPropertyFlags properties)
+std::uint32_t FindMemoryType(
+    VkPhysicalDevice physicalDevice,
+    std::uint32_t typeBits,
+    VkMemoryPropertyFlags properties
+)
 {
     VkPhysicalDeviceMemoryProperties memoryProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
@@ -47,9 +51,14 @@ std::uint32_t FindMemoryType(VkPhysicalDevice physicalDevice, std::uint32_t type
     throw std::runtime_error("Failed to find compatible Vulkan memory type");
 }
 
-BufferResource CreateBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
-                            VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
-                            bool mapMemory)
+BufferResource CreateBuffer(
+    VkPhysicalDevice physicalDevice,
+    VkDevice device,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags properties,
+    bool mapMemory
+)
 {
     BufferResource resource;
 
@@ -101,8 +110,14 @@ void DestroyBuffer(VkDevice device, BufferResource& buffer)
     }
 }
 
-ImageResource CreateImage2D(VkPhysicalDevice physicalDevice, VkDevice device, std::uint32_t width,
-                            std::uint32_t height, VkFormat format, VkImageUsageFlags usage)
+ImageResource CreateImage2D(
+    VkPhysicalDevice physicalDevice,
+    VkDevice device,
+    std::uint32_t width,
+    std::uint32_t height,
+    VkFormat format,
+    VkImageUsageFlags usage
+)
 {
     ImageResource resource;
 
@@ -127,8 +142,11 @@ ImageResource CreateImage2D(VkPhysicalDevice physicalDevice, VkDevice device, st
     VkMemoryAllocateInfo allocateInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = requirements.size,
-        .memoryTypeIndex = FindMemoryType(physicalDevice, requirements.memoryTypeBits,
-                                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+        .memoryTypeIndex = FindMemoryType(
+            physicalDevice,
+            requirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        ),
     };
     CheckVk(vkAllocateMemory(device, &allocateInfo, nullptr, &resource.memory), "vkAllocateMemory");
     CheckVk(vkBindImageMemory(device, resource.image, resource.memory, 0), "vkBindImageMemory");

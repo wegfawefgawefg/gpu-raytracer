@@ -6,3 +6,8 @@ AllowShortIfStatementsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty
 PointerAlignment: Left
 SortIncludes: CaseSensitive
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AlignAfterOpenBracket: BlockIndent

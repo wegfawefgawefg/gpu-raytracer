@@ -76,16 +76,29 @@ void App::Initialize()
 
     SDL_SetHint(SDL_HINT_X11_WINDOW_TYPE, kX11DialogWindowType.data());
 
-    m_window = SDL_CreateWindow(kWindowTitle.data(), kInitialWindowWidth, kInitialWindowHeight,
-                                SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    m_window = SDL_CreateWindow(
+        kWindowTitle.data(),
+        kInitialWindowWidth,
+        kInitialWindowHeight,
+        SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
+    );
     if (m_window == nullptr)
     {
         throw std::runtime_error("SDL_CreateWindow failed");
     }
 
     CenterWindowOnPrimaryDisplay(m_window);
-    m_renderer.Initialize(m_window, m_spheres);
+    m_loadingScreen.Attach(m_window);
+    m_loadingScreen.Update("Booting SDL window...", 0.08f);
+    m_renderer.Initialize(
+        m_window,
+        m_spheres,
+        [this](std::string_view message, float progress)
+        { m_loadingScreen.Update(message, progress); }
+    );
+    m_loadingScreen.Update("Sizing render targets...", 0.94f);
     SyncRendererSize();
+    m_loadingScreen.Update("Startup complete.", 1.0f);
 }
 
 void App::Shutdown()

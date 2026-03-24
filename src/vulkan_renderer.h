@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <SDL3/SDL_video.h>
@@ -12,14 +14,24 @@
 
 struct VulkanRenderer
 {
+    using InitProgressFn = std::function<void(std::string_view, float)>;
+
     VulkanRenderer() = default;
     ~VulkanRenderer();
 
-    void Initialize(SDL_Window* window, std::span<const GpuSphere> spheres);
+    void Initialize(
+        SDL_Window* window,
+        std::span<const GpuSphere> spheres,
+        InitProgressFn progress = {}
+    );
     void Shutdown();
 
-    void Resize(std::uint32_t windowWidth, std::uint32_t windowHeight, std::uint32_t renderWidth,
-                std::uint32_t renderHeight);
+    void Resize(
+        std::uint32_t windowWidth,
+        std::uint32_t windowHeight,
+        std::uint32_t renderWidth,
+        std::uint32_t renderHeight
+    );
     void Render(const GpuFrameParams& params);
 
     void CreateInstance();

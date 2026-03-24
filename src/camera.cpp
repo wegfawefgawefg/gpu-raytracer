@@ -62,8 +62,11 @@ bool Camera::UpdateMovement(const bool* keys, float deltaSeconds)
     return true;
 }
 
-GpuFrameParams Camera::BuildFrameParams(std::uint32_t renderWidth, std::uint32_t renderHeight,
-                                        std::uint32_t sphereCount) const
+GpuFrameParams Camera::BuildFrameParams(
+    std::uint32_t renderWidth,
+    std::uint32_t renderHeight,
+    std::uint32_t sphereCount
+) const
 {
     const Float3 forward = GetForward();
     const Float3 right = GetRight();

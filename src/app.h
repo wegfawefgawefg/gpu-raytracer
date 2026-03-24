@@ -7,6 +7,7 @@
 
 #include "camera.h"
 #include "gpu_types.h"
+#include "loading_screen.h"
 #include "vulkan_renderer.h"
 
 struct App
@@ -31,6 +32,7 @@ struct App
     std::uint32_t m_renderHeight = 0;
 
     Camera m_camera;
+    LoadingScreen m_loadingScreen;
     VulkanRenderer m_renderer;
-    std::array<GpuSphere, 3> m_spheres = BuildDefaultScene();
+    std::array<GpuSphere, 4> m_spheres = BuildDefaultScene();
 };

@@ -49,6 +49,7 @@ add_custom_target(gpu-raytracer-shaders DEPENDS ${SHADER_OUTPUT})
 add_executable(gpu-raytracer
   src/app.cpp
   src/camera.cpp
+  src/loading_screen.cpp
   src/main.cpp
   src/vulkan_helpers.cpp
   src/vulkan_renderer.cpp

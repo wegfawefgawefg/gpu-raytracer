@@ -14,10 +14,16 @@ constexpr VkFormat kRenderTargetFormat = VK_FORMAT_R8G8B8A8_UNORM;
 constexpr std::size_t kMaxSphereBytes = sizeof(GpuSphere) * 64;
 constexpr const char* kShaderPath = GPU_RAYTRACER_SHADER_PATH;
 
-void TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout,
-                     VkImageLayout newLayout, VkAccessFlags srcAccessMask,
-                     VkAccessFlags dstAccessMask, VkPipelineStageFlags srcStageMask,
-                     VkPipelineStageFlags dstStageMask)
+void TransitionImage(
+    VkCommandBuffer commandBuffer,
+    VkImage image,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkAccessFlags srcAccessMask,
+    VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags srcStageMask,
+    VkPipelineStageFlags dstStageMask
+)
 {
     VkImageMemoryBarrier barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -38,8 +44,18 @@ void TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout
             },
     };
 
-    vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, 0, 0, nullptr, 0, nullptr, 1,
-                         &barrier);
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageMask,
+        dstStageMask,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &barrier
+    );
 }
 } // namespace
 
@@ -48,18 +64,55 @@ VulkanRenderer::~VulkanRenderer()
     Shutdown();
 }
 
-void VulkanRenderer::Initialize(SDL_Window* window, std::span<const GpuSphere> spheres)
+void VulkanRenderer::Initialize(
+    SDL_Window* window,
+    std::span<const GpuSphere> spheres,
+    InitProgressFn progress
+)
 {
     m_window = window;
 
+    if (progress)
+    {
+        progress("Creating Vulkan instance...", 0.16f);
+    }
+
     CreateInstance();
+    if (progress)
+    {
+        progress("Creating presentation surface...", 0.28f);
+    }
     CreateSurface();
+    if (progress)
+    {
+        progress("Selecting GPU and queue family...", 0.40f);
+    }
     PickPhysicalDevice();
+    if (progress)
+    {
+        progress("Creating logical device...", 0.52f);
+    }
     CreateDevice();
+    if (progress)
+    {
+        progress("Allocating command and sync objects...", 0.64f);
+    }
     CreateCommandObjects();
     CreateSyncObjects();
+    if (progress)
+    {
+        progress("Uploading scene buffers...", 0.74f);
+    }
     CreateStaticBuffers(spheres);
+    if (progress)
+    {
+        progress("Building descriptor sets...", 0.82f);
+    }
     CreateDescriptorObjects();
+    if (progress)
+    {
+        progress("Creating compute pipeline...", 0.90f);
+    }
     CreateComputePipeline();
 }
 
@@ -130,8 +183,12 @@ void VulkanRenderer::Shutdown()
     }
 }
 
-void VulkanRenderer::Resize(std::uint32_t windowWidth, std::uint32_t windowHeight,
-                            std::uint32_t renderWidth, std::uint32_t renderHeight)
+void VulkanRenderer::Resize(
+    std::uint32_t windowWidth,
+    std::uint32_t windowHeight,
+    std::uint32_t renderWidth,
+    std::uint32_t renderHeight
+)
 {
     if (windowWidth == 0 || windowHeight == 0 || renderWidth == 0 || renderHeight == 0)
     {
@@ -159,7 +216,13 @@ void VulkanRenderer::Render(const GpuFrameParams& params)
 
     std::uint32_t imageIndex = 0;
     VkResult acquireResult = vkAcquireNextImageKHR(
-        m_device, m_swapchain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        m_device,
+        m_swapchain,
+        UINT64_MAX,
+        m_imageAvailableSemaphore,
+        VK_NULL_HANDLE,
+        &imageIndex
+    );
     if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
     {
         return;
@@ -236,12 +299,16 @@ void VulkanRenderer::CreateSurface()
 void VulkanRenderer::PickPhysicalDevice()
 {
     std::uint32_t deviceCount = 0;
-    CheckVk(vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr),
-            "vkEnumeratePhysicalDevices");
+    CheckVk(
+        vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr),
+        "vkEnumeratePhysicalDevices"
+    );
 
     std::vector<VkPhysicalDevice> devices(deviceCount);
-    CheckVk(vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data()),
-            "vkEnumeratePhysicalDevices");
+    CheckVk(
+        vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data()),
+        "vkEnumeratePhysicalDevices"
+    );
 
     for (VkPhysicalDevice device : devices)
     {
@@ -277,8 +344,10 @@ void VulkanRenderer::CreateDevice()
         .enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensions.size()),
         .ppEnabledExtensionNames = deviceExtensions.data(),
     };
-    CheckVk(vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_device),
-            "vkCreateDevice");
+    CheckVk(
+        vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_device),
+        "vkCreateDevice"
+    );
     vkGetDeviceQueue(m_device, m_queueFamilyIndex, 0, &m_queue);
 }
 
@@ -289,8 +358,10 @@ void VulkanRenderer::CreateCommandObjects()
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = m_queueFamilyIndex,
     };
-    CheckVk(vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool),
-            "vkCreateCommandPool");
+    CheckVk(
+        vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool),
+        "vkCreateCommandPool"
+    );
 
     VkCommandBufferAllocateInfo allocateInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -298,17 +369,23 @@ void VulkanRenderer::CreateCommandObjects()
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    CheckVk(vkAllocateCommandBuffers(m_device, &allocateInfo, &m_commandBuffer),
-            "vkAllocateCommandBuffers");
+    CheckVk(
+        vkAllocateCommandBuffers(m_device, &allocateInfo, &m_commandBuffer),
+        "vkAllocateCommandBuffers"
+    );
 }
 
 void VulkanRenderer::CreateSyncObjects()
 {
     VkSemaphoreCreateInfo semaphoreInfo = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    CheckVk(vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore),
-            "vkCreateSemaphore");
-    CheckVk(vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore),
-            "vkCreateSemaphore");
+    CheckVk(
+        vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore),
+        "vkCreateSemaphore"
+    );
+    CheckVk(
+        vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore),
+        "vkCreateSemaphore"
+    );
 
     VkFenceCreateInfo fenceInfo = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -320,12 +397,22 @@ void VulkanRenderer::CreateSyncObjects()
 void VulkanRenderer::CreateStaticBuffers(std::span<const GpuSphere> spheres)
 {
     m_paramsBuffer = CreateBuffer(
-        m_physicalDevice, m_device, sizeof(GpuFrameParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
+        m_physicalDevice,
+        m_device,
+        sizeof(GpuFrameParams),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
 
     m_sphereBuffer = CreateBuffer(
-        m_physicalDevice, m_device, kMaxSphereBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
+        m_physicalDevice,
+        m_device,
+        kMaxSphereBytes,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        true
+    );
     std::memcpy(m_sphereBuffer.mapped, spheres.data(), spheres.size_bytes());
 }
 
@@ -357,8 +444,10 @@ void VulkanRenderer::CreateDescriptorObjects()
         .bindingCount = static_cast<std::uint32_t>(bindings.size()),
         .pBindings = bindings.data(),
     };
-    CheckVk(vkCreateDescriptorSetLayout(m_device, &layoutInfo, nullptr, &m_descriptorSetLayout),
-            "vkCreateDescriptorSetLayout");
+    CheckVk(
+        vkCreateDescriptorSetLayout(m_device, &layoutInfo, nullptr, &m_descriptorSetLayout),
+        "vkCreateDescriptorSetLayout"
+    );
 
     const std::array poolSizes = {
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
@@ -371,8 +460,10 @@ void VulkanRenderer::CreateDescriptorObjects()
         .poolSizeCount = static_cast<std::uint32_t>(poolSizes.size()),
         .pPoolSizes = poolSizes.data(),
     };
-    CheckVk(vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool),
-            "vkCreateDescriptorPool");
+    CheckVk(
+        vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool),
+        "vkCreateDescriptorPool"
+    );
 
     VkDescriptorSetAllocateInfo allocateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -380,8 +471,10 @@ void VulkanRenderer::CreateDescriptorObjects()
         .descriptorSetCount = 1,
         .pSetLayouts = &m_descriptorSetLayout,
     };
-    CheckVk(vkAllocateDescriptorSets(m_device, &allocateInfo, &m_descriptorSet),
-            "vkAllocateDescriptorSets");
+    CheckVk(
+        vkAllocateDescriptorSets(m_device, &allocateInfo, &m_descriptorSet),
+        "vkAllocateDescriptorSets"
+    );
 }
 
 void VulkanRenderer::CreateComputePipeline()
@@ -393,16 +486,20 @@ void VulkanRenderer::CreateComputePipeline()
         .codeSize = shaderBytes.size(),
         .pCode = reinterpret_cast<const std::uint32_t*>(shaderBytes.data()),
     };
-    CheckVk(vkCreateShaderModule(m_device, &moduleInfo, nullptr, &m_shaderModule),
-            "vkCreateShaderModule");
+    CheckVk(
+        vkCreateShaderModule(m_device, &moduleInfo, nullptr, &m_shaderModule),
+        "vkCreateShaderModule"
+    );
 
     VkPipelineLayoutCreateInfo layoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
         .pSetLayouts = &m_descriptorSetLayout,
     };
-    CheckVk(vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &m_pipelineLayout),
-            "vkCreatePipelineLayout");
+    CheckVk(
+        vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &m_pipelineLayout),
+        "vkCreatePipelineLayout"
+    );
 
     VkPipelineShaderStageCreateInfo shaderStage = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -417,32 +514,54 @@ void VulkanRenderer::CreateComputePipeline()
     };
     CheckVk(
         vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline),
-        "vkCreateComputePipelines");
+        "vkCreateComputePipelines"
+    );
 }
 
 void VulkanRenderer::CreateSwapchain(std::uint32_t width, std::uint32_t height)
 {
     VkSurfaceCapabilitiesKHR capabilities;
-    CheckVk(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &capabilities),
-            "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    CheckVk(
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &capabilities),
+        "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"
+    );
 
     std::uint32_t formatCount = 0;
     CheckVk(
         vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &formatCount, nullptr),
-        "vkGetPhysicalDeviceSurfaceFormatsKHR");
+        "vkGetPhysicalDeviceSurfaceFormatsKHR"
+    );
     std::vector<VkSurfaceFormatKHR> formats(formatCount);
-    CheckVk(vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &formatCount,
-                                                 formats.data()),
-            "vkGetPhysicalDeviceSurfaceFormatsKHR");
+    CheckVk(
+        vkGetPhysicalDeviceSurfaceFormatsKHR(
+            m_physicalDevice,
+            m_surface,
+            &formatCount,
+            formats.data()
+        ),
+        "vkGetPhysicalDeviceSurfaceFormatsKHR"
+    );
 
     std::uint32_t presentModeCount = 0;
-    CheckVk(vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface,
-                                                      &presentModeCount, nullptr),
-            "vkGetPhysicalDeviceSurfacePresentModesKHR");
+    CheckVk(
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            m_physicalDevice,
+            m_surface,
+            &presentModeCount,
+            nullptr
+        ),
+        "vkGetPhysicalDeviceSurfacePresentModesKHR"
+    );
     std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-    CheckVk(vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface,
-                                                      &presentModeCount, presentModes.data()),
-            "vkGetPhysicalDeviceSurfacePresentModesKHR");
+    CheckVk(
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            m_physicalDevice,
+            m_surface,
+            &presentModeCount,
+            presentModes.data()
+        ),
+        "vkGetPhysicalDeviceSurfacePresentModesKHR"
+    );
 
     if ((capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0)
     {
@@ -478,17 +597,27 @@ void VulkanRenderer::CreateSwapchain(std::uint32_t width, std::uint32_t height)
         .presentMode = presentMode,
         .clipped = VK_TRUE,
     };
-    CheckVk(vkCreateSwapchainKHR(m_device, &createInfo, nullptr, &m_swapchain),
-            "vkCreateSwapchainKHR");
+    CheckVk(
+        vkCreateSwapchainKHR(m_device, &createInfo, nullptr, &m_swapchain),
+        "vkCreateSwapchainKHR"
+    );
     m_swapchainFormat = surfaceFormat.format;
 
     std::uint32_t swapchainImageCount = 0;
-    CheckVk(vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchainImageCount, nullptr),
-            "vkGetSwapchainImagesKHR");
+    CheckVk(
+        vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchainImageCount, nullptr),
+        "vkGetSwapchainImagesKHR"
+    );
     m_swapchainImages.resize(swapchainImageCount);
-    CheckVk(vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchainImageCount,
-                                    m_swapchainImages.data()),
-            "vkGetSwapchainImagesKHR");
+    CheckVk(
+        vkGetSwapchainImagesKHR(
+            m_device,
+            m_swapchain,
+            &swapchainImageCount,
+            m_swapchainImages.data()
+        ),
+        "vkGetSwapchainImagesKHR"
+    );
 }
 
 void VulkanRenderer::DestroySwapchain()
@@ -510,8 +639,14 @@ void VulkanRenderer::DestroySwapchain()
 
 void VulkanRenderer::CreateRenderTarget(std::uint32_t width, std::uint32_t height)
 {
-    m_renderTarget = CreateImage2D(m_physicalDevice, m_device, width, height, kRenderTargetFormat,
-                                   VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    m_renderTarget = CreateImage2D(
+        m_physicalDevice,
+        m_device,
+        width,
+        height,
+        kRenderTargetFormat,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+    );
     m_renderWidth = width;
     m_renderHeight = height;
     m_renderTargetPrimed = false;
@@ -561,8 +696,13 @@ void VulkanRenderer::UpdateDescriptorSet()
         },
     };
 
-    vkUpdateDescriptorSets(m_device, static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
-                           nullptr);
+    vkUpdateDescriptorSets(
+        m_device,
+        static_cast<std::uint32_t>(writes.size()),
+        writes.data(),
+        0,
+        nullptr
+    );
 }
 
 void VulkanRenderer::RecordCommandBuffer(std::uint32_t swapchainImageIndex)
@@ -576,48 +716,97 @@ void VulkanRenderer::RecordCommandBuffer(std::uint32_t swapchainImageIndex)
     const VkImageLayout renderTargetOldLayout =
         m_renderTargetPrimed ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
 
-    TransitionImage(m_commandBuffer, m_renderTarget.image, renderTargetOldLayout,
-                    VK_IMAGE_LAYOUT_GENERAL, 0, VK_ACCESS_SHADER_WRITE_BIT,
-                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-    TransitionImage(m_commandBuffer, m_swapchainImages[swapchainImageIndex],
-                    VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT);
+    TransitionImage(
+        m_commandBuffer,
+        m_renderTarget.image,
+        renderTargetOldLayout,
+        VK_IMAGE_LAYOUT_GENERAL,
+        0,
+        VK_ACCESS_SHADER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+    );
+    TransitionImage(
+        m_commandBuffer,
+        m_swapchainImages[swapchainImageIndex],
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        0,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT
+    );
 
     vkCmdBindPipeline(m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
-    vkCmdBindDescriptorSets(m_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1,
-                            &m_descriptorSet, 0, nullptr);
+    vkCmdBindDescriptorSets(
+        m_commandBuffer,
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        m_pipelineLayout,
+        0,
+        1,
+        &m_descriptorSet,
+        0,
+        nullptr
+    );
     vkCmdDispatch(m_commandBuffer, groupsX, groupsY, 1);
 
-    TransitionImage(m_commandBuffer, m_renderTarget.image, VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT);
+    TransitionImage(
+        m_commandBuffer,
+        m_renderTarget.image,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_ACCESS_SHADER_WRITE_BIT,
+        VK_ACCESS_TRANSFER_READ_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT
+    );
 
     VkImageBlit blit = {};
     blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.srcSubresource.layerCount = 1;
     blit.srcOffsets[0] = {0, 0, 0};
-    blit.srcOffsets[1] = {static_cast<int32_t>(m_renderWidth), static_cast<int32_t>(m_renderHeight),
-                          1};
+    blit.srcOffsets[1] =
+        {static_cast<int32_t>(m_renderWidth), static_cast<int32_t>(m_renderHeight), 1};
     blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.dstSubresource.layerCount = 1;
     blit.dstOffsets[0] = {0, 0, 0};
-    blit.dstOffsets[1] = {static_cast<int32_t>(m_swapchainExtent.width),
-                          static_cast<int32_t>(m_swapchainExtent.height), 1};
-    vkCmdBlitImage(m_commandBuffer, m_renderTarget.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                   &blit, VK_FILTER_LINEAR);
+    blit.dstOffsets[1] = {
+        static_cast<int32_t>(m_swapchainExtent.width),
+        static_cast<int32_t>(m_swapchainExtent.height),
+        1
+    };
+    vkCmdBlitImage(
+        m_commandBuffer,
+        m_renderTarget.image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        m_swapchainImages[swapchainImageIndex],
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &blit,
+        VK_FILTER_LINEAR
+    );
 
-    TransitionImage(m_commandBuffer, m_renderTarget.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT,
-                    VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    TransitionImage(
+        m_commandBuffer,
+        m_renderTarget.image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_ACCESS_TRANSFER_READ_BIT,
+        VK_ACCESS_SHADER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+    );
 
-    TransitionImage(m_commandBuffer, m_swapchainImages[swapchainImageIndex],
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    TransitionImage(
+        m_commandBuffer,
+        m_swapchainImages[swapchainImageIndex],
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        0,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+    );
 
     CheckVk(vkEndCommandBuffer(m_commandBuffer), "vkEndCommandBuffer");
     m_renderTargetPrimed = true;
@@ -637,8 +826,8 @@ VulkanRenderer::ChooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& forma
     return formats.front();
 }
 
-VkPresentModeKHR
-VulkanRenderer::ChoosePresentMode(const std::vector<VkPresentModeKHR>& presentModes) const
+VkPresentModeKHR VulkanRenderer::ChoosePresentMode(const std::vector<VkPresentModeKHR>& presentModes
+) const
 {
     for (const VkPresentModeKHR mode : presentModes)
     {
@@ -662,9 +851,15 @@ std::uint32_t VulkanRenderer::ChooseQueueFamily() const
     for (std::uint32_t index = 0; index < queueFamilyCount; ++index)
     {
         VkBool32 supportsPresent = VK_FALSE;
-        CheckVk(vkGetPhysicalDeviceSurfaceSupportKHR(m_physicalDevice, index, m_surface,
-                                                     &supportsPresent),
-                "vkGetPhysicalDeviceSurfaceSupportKHR");
+        CheckVk(
+            vkGetPhysicalDeviceSurfaceSupportKHR(
+                m_physicalDevice,
+                index,
+                m_surface,
+                &supportsPresent
+            ),
+            "vkGetPhysicalDeviceSurfaceSupportKHR"
+        );
 
         const VkQueueFlags flags = families[index].queueFlags;
         const bool supportsGraphics = (flags & VK_QUEUE_GRAPHICS_BIT) != 0;

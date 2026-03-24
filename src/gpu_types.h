@@ -9,6 +9,7 @@ enum class MaterialKind : std::uint32_t
 {
     Diffuse = 0,
     Emissive = 1,
+    Mirror = 2,
 };
 
 struct alignas(16) GpuSphere
@@ -27,7 +28,7 @@ struct alignas(16) GpuFrameParams
     Float4 renderInfo;
 };
 
-inline std::array<GpuSphere, 3> BuildDefaultScene()
+inline std::array<GpuSphere, 4> BuildDefaultScene()
 {
     return {{
         {
@@ -38,6 +39,11 @@ inline std::array<GpuSphere, 3> BuildDefaultScene()
         {
             .centerRadius = {0.0f, 0.0f, 0.0f, 1.0f},
             .albedoKind = {0.92f, 0.28f, 0.18f, static_cast<float>(MaterialKind::Diffuse)},
+            .emission = {0.0f, 0.0f, 0.0f, 0.0f},
+        },
+        {
+            .centerRadius = {-1.7f, 0.2f, -0.8f, 1.2f},
+            .albedoKind = {0.94f, 0.96f, 0.99f, static_cast<float>(MaterialKind::Mirror)},
             .emission = {0.0f, 0.0f, 0.0f, 0.0f},
         },
         {

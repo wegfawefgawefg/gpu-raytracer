@@ -10,8 +10,11 @@ struct Camera
 
     void UpdateLook(float deltaX, float deltaY);
     bool UpdateMovement(const bool* keys, float deltaSeconds);
-    GpuFrameParams BuildFrameParams(std::uint32_t renderWidth, std::uint32_t renderHeight,
-                                    std::uint32_t sphereCount) const;
+    GpuFrameParams BuildFrameParams(
+        std::uint32_t renderWidth,
+        std::uint32_t renderHeight,
+        std::uint32_t sphereCount
+    ) const;
     Float3 GetForward() const;
     Float3 GetRight() const;
 

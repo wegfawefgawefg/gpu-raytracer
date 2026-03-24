@@ -23,14 +23,28 @@ struct ImageResource
 
 void CheckVk(VkResult result, std::string_view context);
 std::vector<std::byte> ReadBinaryFile(std::string_view path);
-std::uint32_t FindMemoryType(VkPhysicalDevice physicalDevice, std::uint32_t typeBits,
-                             VkMemoryPropertyFlags properties);
+std::uint32_t FindMemoryType(
+    VkPhysicalDevice physicalDevice,
+    std::uint32_t typeBits,
+    VkMemoryPropertyFlags properties
+);
 
-BufferResource CreateBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
-                            VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
-                            bool mapMemory);
+BufferResource CreateBuffer(
+    VkPhysicalDevice physicalDevice,
+    VkDevice device,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags properties,
+    bool mapMemory
+);
 void DestroyBuffer(VkDevice device, BufferResource& buffer);
 
-ImageResource CreateImage2D(VkPhysicalDevice physicalDevice, VkDevice device, std::uint32_t width,
-                            std::uint32_t height, VkFormat format, VkImageUsageFlags usage);
+ImageResource CreateImage2D(
+    VkPhysicalDevice physicalDevice,
+    VkDevice device,
+    std::uint32_t width,
+    std::uint32_t height,
+    VkFormat format,
+    VkImageUsageFlags usage
+);
 void DestroyImage(VkDevice device, ImageResource& image);
