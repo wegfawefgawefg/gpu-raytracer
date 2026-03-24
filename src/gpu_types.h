@@ -37,12 +37,12 @@ inline std::array<GpuSphere, 4> BuildDefaultScene()
             .emission = {0.0f, 0.0f, 0.0f, 0.0f},
         },
         {
-            .centerRadius = {0.0f, 0.0f, 0.0f, 1.0f},
-            .albedoKind = {0.92f, 0.28f, 0.18f, static_cast<float>(MaterialKind::Diffuse)},
+            .centerRadius = {1.15f, 0.05f, -0.25f, 1.0f},
+            .albedoKind = {0.94f, 0.96f, 0.99f, static_cast<float>(MaterialKind::Mirror)},
             .emission = {0.0f, 0.0f, 0.0f, 0.0f},
         },
         {
-            .centerRadius = {-1.7f, 0.2f, -0.8f, 1.2f},
+            .centerRadius = {-1.15f, 0.05f, -0.25f, 1.0f},
             .albedoKind = {0.94f, 0.96f, 0.99f, static_cast<float>(MaterialKind::Mirror)},
             .emission = {0.0f, 0.0f, 0.0f, 0.0f},
         },
