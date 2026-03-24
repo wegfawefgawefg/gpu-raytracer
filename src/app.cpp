@@ -95,6 +95,7 @@ void App::Run()
             m_scene.triangles.size()
         );
         params.renderInfo.z = static_cast<float>(m_windowWidth);
+        params.frameInfo.z = m_accumulationEnabled ? 1.0f : 0.0f;
         params.frameInfo.w = static_cast<float>(m_windowHeight);
         params.overlayInfo =
             {
@@ -211,6 +212,12 @@ void App::HandleEvent(const SDL_Event& event)
             m_renderDivisor = 4;
             SyncRendererSize();
         }
+        if (event.key.key == SDLK_F4)
+        {
+            m_accumulationEnabled = !m_accumulationEnabled;
+            ResetAccumulation();
+            UpdateOverlayText();
+        }
         break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -307,8 +314,22 @@ void App::UpdateOverlayText()
         m_renderHeight
     );
 
+    char decoratedText[160] = {};
+    std::snprintf(
+        decoratedText,
+        sizeof(decoratedText),
+        "%s   %s",
+        text,
+        m_accumulationEnabled ? "accum" : "classic"
+    );
+
     const SDL_Color color = {255, 235, 210, 255};
-    SDL_Surface* surface = TTF_RenderText_Blended(m_uiFont, text, std::strlen(text), color);
+    SDL_Surface* surface = TTF_RenderText_Blended(
+        m_uiFont,
+        decoratedText,
+        std::strlen(decoratedText),
+        color
+    );
     if (surface == nullptr)
     {
         return;

@@ -104,6 +104,11 @@ struct ScatterInfo
     vec3 attenuation;
 };
 
+bool accumulationEnabled()
+{
+    return params.frameInfo.z > 0.5;
+}
+
 vec4 unpackRgba8(uint packed)
 {
     return vec4(
@@ -443,6 +448,11 @@ ScatterInfo scatterRay(
     vec3 albedo = materialAlbedo(material, hit.uv);
     if (material.meta.x == MATERIAL_DIFFUSE)
     {
+        if (!accumulationEnabled())
+        {
+            return scatter;
+        }
+
         scatter.continueTrace = true;
         scatter.nextDirection = cosineHemisphere(rngState, hit.normal);
         scatter.attenuation = albedo;
@@ -472,7 +482,9 @@ void main()
     vec2 uv = (vec2(pixel) + vec2(0.5)) / vec2(renderSize);
     uint rngState = uint(pixel.x) * 1973u + uint(pixel.y) * 9277u +
                     uint(params.frameInfo.y) * 26699u + 911u;
-    vec2 jitter = vec2(randomFloat(rngState), randomFloat(rngState)) - vec2(0.5);
+    vec2 jitter = accumulationEnabled()
+                      ? vec2(randomFloat(rngState), randomFloat(rngState)) - vec2(0.5)
+                      : vec2(0.0);
     uv += jitter / vec2(renderSize);
     vec2 screen = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
 
@@ -512,10 +524,14 @@ void main()
         rayDirection = scatter.nextDirection;
     }
 
-    vec4 previousAccumulation =
-        params.frameInfo.x > 0.0 ? imageLoad(accumulationImage, pixel) : vec4(0.0);
-    vec4 nextAccumulation = previousAccumulation + vec4(color, 1.0);
-    imageStore(accumulationImage, pixel, nextAccumulation);
+    vec4 nextAccumulation = vec4(color, 1.0);
+    if (accumulationEnabled())
+    {
+        vec4 previousAccumulation =
+            params.frameInfo.x > 0.0 ? imageLoad(accumulationImage, pixel) : vec4(0.0);
+        nextAccumulation = previousAccumulation + vec4(color, 1.0);
+        imageStore(accumulationImage, pixel, nextAccumulation);
+    }
 
     vec3 averagedColor = nextAccumulation.rgb / max(nextAccumulation.a, 1.0);
     averagedColor = clamp(averagedColor, vec3(0.0), vec3(1.0));

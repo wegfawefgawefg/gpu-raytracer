@@ -41,6 +41,7 @@ struct App
     std::uint32_t m_overlayHeight = 0;
     float m_smoothedFps = 0.0f;
     float m_overlayRefreshSeconds = 0.0f;
+    bool m_accumulationEnabled = true;
 
     Camera m_camera;
     LoadingScreen m_loadingScreen;

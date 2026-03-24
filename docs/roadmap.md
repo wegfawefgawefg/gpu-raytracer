@@ -97,6 +97,12 @@ That is wavefront-style path tracing.
 So yes, there is a real architecture where rays survive across passes and are resumed later. That
 is a future optimization / architecture step, not the next milestone.
 
+## Related Notes
+
+- `current-renderer-walkthrough.md`: what the renderer does right now
+- `lightmap-baking-notes.md`: how this codebase could bake static lighting into textures
+- `bake-volume-notes.md`: how a practical editor-facing bake-volume workflow could look
+
 ## Immediate Target
 
 The immediate target is:
