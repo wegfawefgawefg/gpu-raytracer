@@ -14,6 +14,8 @@
 
 namespace
 {
+constexpr float kDegreesToRadians = 3.1415926535f / 180.0f;
+
 Float3 Min(const Float3& a, const Float3& b)
 {
     return {
@@ -53,6 +55,41 @@ Float3 NormalizeVertex(
     if (params.normalize)
     {
         local = (local - center) / extent;
+    }
+
+    const Float3 rotationRadians = params.rotationDegrees * kDegreesToRadians;
+
+    if (rotationRadians.x != 0.0f)
+    {
+        const float c = std::cos(rotationRadians.x);
+        const float s = std::sin(rotationRadians.x);
+        local = {
+            local.x,
+            local.y * c - local.z * s,
+            local.y * s + local.z * c,
+        };
+    }
+
+    if (rotationRadians.y != 0.0f)
+    {
+        const float c = std::cos(rotationRadians.y);
+        const float s = std::sin(rotationRadians.y);
+        local = {
+            local.x * c + local.z * s,
+            local.y,
+            -local.x * s + local.z * c,
+        };
+    }
+
+    if (rotationRadians.z != 0.0f)
+    {
+        const float c = std::cos(rotationRadians.z);
+        const float s = std::sin(rotationRadians.z);
+        local = {
+            local.x * c - local.y * s,
+            local.x * s + local.y * c,
+            local.z,
+        };
     }
 
     return {

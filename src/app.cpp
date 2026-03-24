@@ -143,6 +143,7 @@ void App::Initialize()
         .path = kSampleMeshPath,
         .position = {0.0f, 0.10f, 0.0f},
         .scale = {2.5f, 2.5f, 2.5f},
+        .rotationDegrees = {-90.0f, 0.0f, 0.0f},
         .normalize = true,
         .albedo = {0.78f, 0.80f, 0.84f},
         .materialKind = MaterialKind::Diffuse,
