@@ -88,6 +88,8 @@ GpuFrameParams Camera::BuildFrameParams(
                 0.0f,
                 static_cast<float>(sphereCount),
             },
+        .frameInfo = {0.0f, 0.0f, 0.0f, 0.0f},
+        .overlayInfo = {0.0f, 0.0f, 16.0f, 16.0f},
     };
 }
 

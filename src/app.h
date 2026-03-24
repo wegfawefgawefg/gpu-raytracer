@@ -2,8 +2,10 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include "camera.h"
 #include "gpu_types.h"
@@ -21,8 +23,11 @@ struct App
     void HandleEvent(const SDL_Event& event);
     void Update(float deltaSeconds);
     void SyncRendererSize();
+    void ResetAccumulation();
+    void UpdateOverlayText();
 
     SDL_Window* m_window = nullptr;
+    TTF_Font* m_uiFont = nullptr;
     bool m_running = true;
     bool m_captureMouse = false;
     std::uint32_t m_renderDivisor = 2;
@@ -30,9 +35,14 @@ struct App
     std::uint32_t m_windowHeight = 0;
     std::uint32_t m_renderWidth = 0;
     std::uint32_t m_renderHeight = 0;
+    std::uint32_t m_overlayWidth = 0;
+    std::uint32_t m_overlayHeight = 0;
+    float m_smoothedFps = 0.0f;
+    float m_overlayRefreshSeconds = 0.0f;
 
     Camera m_camera;
     LoadingScreen m_loadingScreen;
     VulkanRenderer m_renderer;
     std::array<GpuSphere, 4> m_spheres = BuildDefaultScene();
+    std::array<std::uint32_t, kOverlayPixelCount> m_overlayPixels = {};
 };

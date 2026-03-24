@@ -5,6 +5,10 @@
 
 #include "math_types.h"
 
+constexpr std::uint32_t kOverlayBufferWidth = 512;
+constexpr std::uint32_t kOverlayBufferHeight = 64;
+constexpr std::uint32_t kOverlayPixelCount = kOverlayBufferWidth * kOverlayBufferHeight;
+
 enum class MaterialKind : std::uint32_t
 {
     Diffuse = 0,
@@ -26,6 +30,8 @@ struct alignas(16) GpuFrameParams
     Float4 cameraRight;
     Float4 cameraUp;
     Float4 renderInfo;
+    Float4 frameInfo;
+    Float4 overlayInfo;
 };
 
 inline std::array<GpuSphere, 4> BuildDefaultScene()

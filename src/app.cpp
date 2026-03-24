@@ -1,16 +1,20 @@
 #include "app.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <chrono>
+#include <cstring>
 #include <stdexcept>
 #include <string_view>
 
 namespace
 {
 constexpr std::string_view kWindowTitle = "gpu-raytracer";
+constexpr std::string_view kUiFontPath = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
 constexpr int kInitialWindowWidth = 1440;
 constexpr int kInitialWindowHeight = 900;
 constexpr std::string_view kX11DialogWindowType = "_NET_WM_WINDOW_TYPE_DIALOG";
+constexpr float kOverlayRefreshPeriod = 0.12f;
 
 void LogSdlError(std::string_view context)
 {
@@ -59,11 +63,41 @@ void App::Run()
         const std::chrono::duration<float> delta = currentTime - previousTime;
         previousTime = currentTime;
 
-        Update(delta.count());
+        const float deltaSeconds = delta.count();
+        Update(deltaSeconds);
 
-        const GpuFrameParams params =
+        if (deltaSeconds > 0.0f)
+        {
+            const float instantFps = 1.0f / deltaSeconds;
+            if (m_smoothedFps <= 0.0f)
+            {
+                m_smoothedFps = instantFps;
+            }
+            else
+            {
+                m_smoothedFps = m_smoothedFps * 0.985f + instantFps * 0.015f;
+            }
+        }
+
+        m_overlayRefreshSeconds -= deltaSeconds;
+        if (m_overlayRefreshSeconds <= 0.0f)
+        {
+            UpdateOverlayText();
+            m_overlayRefreshSeconds = kOverlayRefreshPeriod;
+        }
+
+        GpuFrameParams params =
             m_camera.BuildFrameParams(m_renderWidth, m_renderHeight, m_spheres.size());
-        m_renderer.Render(params);
+        params.renderInfo.z = static_cast<float>(m_windowWidth);
+        params.frameInfo.w = static_cast<float>(m_windowHeight);
+        params.overlayInfo =
+            {
+                static_cast<float>(m_overlayWidth),
+                static_cast<float>(m_overlayHeight),
+                16.0f,
+                16.0f,
+            };
+        m_renderer.Render(params, m_overlayPixels);
     }
 }
 
@@ -87,6 +121,17 @@ void App::Initialize()
         throw std::runtime_error("SDL_CreateWindow failed");
     }
 
+    if (!TTF_Init())
+    {
+        throw std::runtime_error("TTF_Init failed");
+    }
+
+    m_uiFont = TTF_OpenFont(kUiFontPath.data(), 22.0f);
+    if (m_uiFont == nullptr)
+    {
+        throw std::runtime_error("TTF_OpenFont failed");
+    }
+
     CenterWindowOnPrimaryDisplay(m_window);
     m_loadingScreen.Attach(m_window);
     m_loadingScreen.Update("Booting SDL window...", 0.08f);
@@ -99,11 +144,20 @@ void App::Initialize()
     m_loadingScreen.Update("Sizing render targets...", 0.94f);
     SyncRendererSize();
     m_loadingScreen.Update("Startup complete.", 1.0f);
+    UpdateOverlayText();
 }
 
 void App::Shutdown()
 {
     m_renderer.Shutdown();
+
+    if (m_uiFont != nullptr)
+    {
+        TTF_CloseFont(m_uiFont);
+        m_uiFont = nullptr;
+    }
+
+    TTF_Quit();
 
     if (m_window != nullptr)
     {
@@ -164,6 +218,7 @@ void App::HandleEvent(const SDL_Event& event)
         if (m_captureMouse)
         {
             m_camera.UpdateLook(event.motion.xrel, event.motion.yrel);
+            ResetAccumulation();
         }
         break;
 
@@ -185,7 +240,10 @@ void App::Update(float deltaSeconds)
         return;
     }
 
-    m_camera.UpdateMovement(keys, deltaSeconds);
+    if (m_camera.UpdateMovement(keys, deltaSeconds))
+    {
+        ResetAccumulation();
+    }
 }
 
 void App::SyncRendererSize()
@@ -203,4 +261,68 @@ void App::SyncRendererSize()
     m_renderWidth = std::max(1u, m_windowWidth / m_renderDivisor);
     m_renderHeight = std::max(1u, m_windowHeight / m_renderDivisor);
     m_renderer.Resize(m_windowWidth, m_windowHeight, m_renderWidth, m_renderHeight);
+    ResetAccumulation();
+}
+
+void App::ResetAccumulation()
+{
+    m_renderer.ResetAccumulation();
+}
+
+void App::UpdateOverlayText()
+{
+    m_overlayPixels.fill(0);
+    m_overlayWidth = 0;
+    m_overlayHeight = 0;
+
+    if (m_uiFont == nullptr)
+    {
+        return;
+    }
+
+    const float msPerFrame = m_smoothedFps > 0.0f ? 1000.0f / m_smoothedFps : 0.0f;
+    char text[128] = {};
+    std::snprintf(
+        text,
+        sizeof(text),
+        "%.2f ms   %.0f fps   %ux%u",
+        msPerFrame,
+        m_smoothedFps,
+        m_renderWidth,
+        m_renderHeight
+    );
+
+    const SDL_Color color = {255, 235, 210, 255};
+    SDL_Surface* surface = TTF_RenderText_Blended(m_uiFont, text, std::strlen(text), color);
+    if (surface == nullptr)
+    {
+        return;
+    }
+
+    SDL_Surface* rgbaSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+    SDL_DestroySurface(surface);
+    if (rgbaSurface == nullptr)
+    {
+        return;
+    }
+
+    m_overlayWidth =
+        std::min(static_cast<std::uint32_t>(rgbaSurface->w), kOverlayBufferWidth);
+    m_overlayHeight =
+        std::min(static_cast<std::uint32_t>(rgbaSurface->h), kOverlayBufferHeight);
+
+    if (m_overlayWidth > 0 && m_overlayHeight > 0 && SDL_LockSurface(rgbaSurface))
+    {
+        const auto* sourceRows = static_cast<const std::uint8_t*>(rgbaSurface->pixels);
+        for (std::uint32_t row = 0; row < m_overlayHeight; ++row)
+        {
+            const auto* source = sourceRows + row * rgbaSurface->pitch;
+            auto* destination =
+                reinterpret_cast<std::uint8_t*>(m_overlayPixels.data() + row * kOverlayBufferWidth);
+            std::memcpy(destination, source, m_overlayWidth * sizeof(std::uint32_t));
+        }
+        SDL_UnlockSurface(rgbaSurface);
+    }
+
+    SDL_DestroySurface(rgbaSurface);
 }

@@ -10,17 +10,20 @@ struct Sphere
 };
 
 layout(rgba8, binding = 0) uniform writeonly image2D outputImage;
+layout(rgba32f, binding = 1) uniform image2D accumulationImage;
 
-layout(std140, binding = 1) uniform FrameParams
+layout(std140, binding = 2) uniform FrameParams
 {
     vec4 cameraPosition;
     vec4 cameraForward;
     vec4 cameraRight;
     vec4 cameraUp;
     vec4 renderInfo;
+    vec4 frameInfo;
+    vec4 overlayInfo;
 } params;
 
-layout(std430, binding = 2) readonly buffer SphereBuffer
+layout(std430, binding = 3) readonly buffer SphereBuffer
 {
     Sphere spheres[];
 };
@@ -102,6 +105,42 @@ vec3 skyColor(vec3 rayDirection)
     return mix(vec3(0.75, 0.84, 0.96), vec3(0.10, 0.16, 0.28), t);
 }
 
+uint hash32(uint state)
+{
+    state ^= 2747636419u;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    return state;
+}
+
+float randomFloat(inout uint state)
+{
+    state = hash32(state);
+    return float(state) / 4294967295.0;
+}
+
+vec3 randomUnitVector(inout uint state)
+{
+    float z = randomFloat(state) * 2.0 - 1.0;
+    float a = randomFloat(state) * 6.28318530718;
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    return vec3(r * cos(a), r * sin(a), z);
+}
+
+vec3 cosineHemisphere(inout uint state, vec3 normal)
+{
+    vec3 sampleDir = randomUnitVector(state);
+    if (dot(sampleDir, normal) < 0.0)
+    {
+        sampleDir = -sampleDir;
+    }
+
+    return normalize(normal + sampleDir);
+}
+
 vec3 shade(HitInfo hit)
 {
     Sphere lightSphere = spheres[3];
@@ -126,7 +165,7 @@ vec3 shade(HitInfo hit)
     return ambient + direct;
 }
 
-ScatterInfo scatterRay(HitInfo hit, vec3 rayDirection)
+ScatterInfo scatterRay(HitInfo hit, vec3 rayDirection, inout uint rngState)
 {
     ScatterInfo scatter;
     scatter.continueTrace = false;
@@ -136,7 +175,8 @@ ScatterInfo scatterRay(HitInfo hit, vec3 rayDirection)
 
     if (hit.materialKind == 0)
     {
-        scatter.continueTrace = false;
+        scatter.continueTrace = true;
+        scatter.nextDirection = cosineHemisphere(rngState, hit.normal);
         scatter.attenuation = hit.albedo;
         return scatter;
     }
@@ -162,6 +202,10 @@ void main()
     }
 
     vec2 uv = (vec2(pixel) + vec2(0.5)) / vec2(renderSize);
+    uint rngState = uint(pixel.x) * 1973u + uint(pixel.y) * 9277u +
+                    uint(params.frameInfo.y) * 26699u + 911u;
+    vec2 jitter = vec2(randomFloat(rngState), randomFloat(rngState)) - vec2(0.5);
+    uv += jitter / vec2(renderSize);
     vec2 screen = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
 
     vec3 rayOrigin = params.cameraPosition.xyz;
@@ -188,7 +232,7 @@ void main()
             color += throughput * shade(hit);
         }
 
-        ScatterInfo scatter = scatterRay(hit, rayDirection);
+        ScatterInfo scatter = scatterRay(hit, rayDirection, rngState);
         if (!scatter.continueTrace)
         {
             break;
@@ -199,8 +243,14 @@ void main()
         rayDirection = scatter.nextDirection;
     }
 
-    color = clamp(color, vec3(0.0), vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
+    vec4 previousAccumulation =
+        params.frameInfo.x > 0.0 ? imageLoad(accumulationImage, pixel) : vec4(0.0);
+    vec4 nextAccumulation = previousAccumulation + vec4(color, 1.0);
+    imageStore(accumulationImage, pixel, nextAccumulation);
 
-    imageStore(outputImage, pixel, vec4(color, 1.0));
+    vec3 averagedColor = nextAccumulation.rgb / max(nextAccumulation.a, 1.0);
+    averagedColor = clamp(averagedColor, vec3(0.0), vec3(1.0));
+    averagedColor = pow(averagedColor, vec3(1.0 / 2.2));
+
+    imageStore(outputImage, pixel, vec4(averagedColor, 1.0));
 }

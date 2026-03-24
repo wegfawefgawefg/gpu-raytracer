@@ -1,0 +1,62 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(rgba8, binding = 0) uniform readonly image2D sourceImage;
+layout(rgba8, binding = 1) uniform writeonly image2D outputImage;
+
+layout(std140, binding = 2) uniform FrameParams
+{
+    vec4 cameraPosition;
+    vec4 cameraForward;
+    vec4 cameraRight;
+    vec4 cameraUp;
+    vec4 renderInfo;
+    vec4 frameInfo;
+    vec4 overlayInfo;
+} params;
+
+layout(std430, binding = 3) readonly buffer OverlayBuffer
+{
+    uint overlayPixels[];
+};
+
+vec4 unpackOverlayPixel(uint packed)
+{
+    return vec4(
+        float(packed & 0xFFu),
+        float((packed >> 8u) & 0xFFu),
+        float((packed >> 16u) & 0xFFu),
+        float((packed >> 24u) & 0xFFu)
+    ) / 255.0;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 windowSize = ivec2(params.renderInfo.z, params.frameInfo.w);
+    ivec2 renderSize = ivec2(params.renderInfo.xy);
+    if (pixel.x >= windowSize.x || pixel.y >= windowSize.y)
+    {
+        return;
+    }
+
+    ivec2 sourcePixel = ivec2(
+        min(pixel.x * renderSize.x / max(windowSize.x, 1), renderSize.x - 1),
+        min(pixel.y * renderSize.y / max(windowSize.y, 1), renderSize.y - 1)
+    );
+    vec3 color = imageLoad(sourceImage, sourcePixel).rgb;
+
+    ivec2 overlaySize = ivec2(params.overlayInfo.xy);
+    ivec2 overlayOrigin = ivec2(params.overlayInfo.zw);
+    ivec2 overlayPixel = pixel - overlayOrigin;
+    if (overlayPixel.x >= 0 && overlayPixel.y >= 0 && overlayPixel.x < overlaySize.x &&
+        overlayPixel.y < overlaySize.y)
+    {
+        int overlayIndex = overlayPixel.y * 512 + overlayPixel.x;
+        vec4 overlayColor = unpackOverlayPixel(overlayPixels[overlayIndex]);
+        color = mix(color, overlayColor.rgb, overlayColor.a);
+    }
+
+    imageStore(outputImage, pixel, vec4(color, 1.0));
+}

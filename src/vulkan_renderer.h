@@ -32,7 +32,8 @@ struct VulkanRenderer
         std::uint32_t renderWidth,
         std::uint32_t renderHeight
     );
-    void Render(const GpuFrameParams& params);
+    void Render(const GpuFrameParams& params, std::span<const std::uint32_t> overlayPixels);
+    void ResetAccumulation();
 
     void CreateInstance();
     void CreateSurface();
@@ -42,7 +43,9 @@ struct VulkanRenderer
     void CreateSyncObjects();
     void CreateStaticBuffers(std::span<const GpuSphere> spheres);
     void CreateDescriptorObjects();
+    void CreatePresentDescriptorObjects();
     void CreateComputePipeline();
+    void CreatePresentPipeline();
     void CreateSwapchain(std::uint32_t width, std::uint32_t height);
     void DestroySwapchain();
     void CreateRenderTarget(std::uint32_t width, std::uint32_t height);
@@ -74,7 +77,10 @@ struct VulkanRenderer
     VkFence m_frameFence = VK_NULL_HANDLE;
 
     BufferResource m_paramsBuffer;
+    BufferResource m_overlayBuffer;
     BufferResource m_sphereBuffer;
+    ImageResource m_accumulationTarget;
+    ImageResource m_presentTarget;
     ImageResource m_renderTarget;
 
     VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
@@ -83,8 +89,16 @@ struct VulkanRenderer
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_pipeline = VK_NULL_HANDLE;
     VkShaderModule m_shaderModule = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_presentDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_presentDescriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSet m_presentDescriptorSet = VK_NULL_HANDLE;
+    VkPipelineLayout m_presentPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_presentPipeline = VK_NULL_HANDLE;
+    VkShaderModule m_presentShaderModule = VK_NULL_HANDLE;
 
     std::uint32_t m_renderWidth = 0;
     std::uint32_t m_renderHeight = 0;
+    std::uint32_t m_accumulatedFrames = 0;
     bool m_renderTargetPrimed = false;
+    bool m_accumulationPrimed = false;
 };
